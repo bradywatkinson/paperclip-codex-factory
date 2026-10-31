@@ -6,12 +6,12 @@ Initial scope: persistent storage, authenticated local UI, backups, and a macOS 
 
 ## Versions and prerequisites
 
-- Paperclip: `2026.1023.0`, installed through its supported managed installer.
+- Paperclip: `2026.1023.0`, installed through the supported managed installer or an optional global npm installation.
 - Node.js: `24.15.0` reference runtime; bootstrap requires at least `24.15.0` for current transitive dependencies.
 - Apple Silicon macOS, Git, npm/npx, and a signed-in desktop user for the LaunchAgent.
 - Bootstrap requires 10 GiB free disk for install/build/cache headroom; this is a conservative budget, not a measured upstream minimum.
 
-Keep the Node executable at a stable path: Paperclip's managed shim records its absolute path, and launchd does not load shell version managers. Put the chosen Node `bin` directory first on `PATH`; `PAPERCLIP_NODE` may select its absolute executable for repository scripts.
+Keep the Node executable at a stable path: the managed shim and this repository's global launcher record its absolute path, and launchd does not load shell version managers. Put the chosen Node `bin` directory first on `PATH`; `PAPERCLIP_NODE` may select its absolute executable for repository scripts.
 
 ## Start here
 
@@ -19,9 +19,10 @@ Keep the Node executable at a stable path: Paperclip's managed shim records its 
 git clone https://github.com/bradywatkinson/paperclip-codex-factory.git
 cd paperclip-codex-factory
 node --version
+export PAPERCLIP_TELEMETRY_DISABLED=1
 ./scripts/bootstrap
-./scripts/paperclip onboard
-# Choose Quickstart; decline BOTH service installation and “Start Paperclip now”.
+./scripts/paperclip onboard --no-install-service
+# Choose Quickstart; decline “Start Paperclip now”.
 "${PAPERCLIP_NODE:-node}" scripts/configure-local.mjs "$HOME/.paperclip/instances/factory/config.json"
 ./scripts/paperclip doctor
 ./scripts/paperclip run
@@ -32,9 +33,9 @@ node --version
 
 Follow the foreground startup output to claim the authenticated board in your browser at `http://127.0.0.1:8100`. Claim links contain credentials; keep them out of commits and issue evidence. Install the login service after that first UI check. See [operations](docs/operations.md) for installation details and [the fresh-Mac smoke test](docs/smoke-test.md) for acceptance checks.
 
-Bootstrap only installs the managed CLI. Do not start Paperclip until onboarding has finished and `configure-local.mjs` has applied authentication. In this release, `onboard --yes` starts the foreground server and offers no `--no-run` switch, so use the interactive choices above.
+Bootstrap only installs the CLI. For a single-payload alternative to managed installation, run `PAPERCLIP_INSTALL_METHOD=global ./scripts/bootstrap`; see [installation methods](docs/operations.md#global-npm-alternative). Do not start Paperclip until onboarding has finished and `configure-local.mjs` has applied authentication. In this release, `onboard --yes` starts the foreground server and offers no `--no-run` switch, so use the interactive choices above.
 
-The wrapper defaults to `PORT=8100`, `PAPERCLIP_HOME=$HOME/.paperclip` and `PAPERCLIP_INSTANCE_ID=factory`; existing environment overrides select a different scope only when intentional. Managed code lives in `~/.paperclip/cli`, the stable CLI entrypoint is `~/.local/bin/paperclipai`, and instance state lives in `~/.paperclip/instances/factory`. No application checkout is the service's working storage.
+The wrapper defaults to `PORT=8100`, `PAPERCLIP_HOME=$HOME/.paperclip` and `PAPERCLIP_INSTANCE_ID=factory`; existing environment overrides select a different scope only when intentional. Managed code lives in `~/.paperclip/cli`, the stable CLI entrypoint is `~/.local/bin/paperclipai`, and instance state lives in `~/.paperclip/instances/factory`. With global installation, code lives in `~/.local/share/paperclip-global` and its launcher in `~/.local/share/paperclip-factory/bin/paperclipai`. The wrapper prefers that launcher when present and supplies its path to the native service. No application checkout is the service's working storage.
 
 ## Verification status
 
@@ -47,7 +48,7 @@ Issue: [#1 — Bootstrap Paperclip local control plane](https://github.com/brady
 ```sh
 bash -n scripts/bootstrap scripts/paperclip
 node --check scripts/configure-local.mjs
-node --test tests/configure-local.test.mjs
+node --test tests/*.test.mjs
 ```
 
 The tests need loopback port `8100` available and use disposable configuration files and an inert CLI fixture.

@@ -33,6 +33,7 @@ delete config.server.customBindHost;
 config.auth = { ...config.auth, baseUrlMode: 'auto' };
 if (config.auth.disableSignUp === undefined) config.auth.disableSignUp = false;
 delete config.auth.publicBaseUrl;
+config.telemetry = { ...config.telemetry, enabled: false };
 const tmp = `${path}.${process.pid}.tmp`;
 try {
   fs.writeFileSync(tmp, `${JSON.stringify(config, null, 2)}\n`, {mode: 0o600, flag: 'wx'});
