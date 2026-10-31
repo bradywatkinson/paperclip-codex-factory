@@ -15,8 +15,13 @@ npx_cli="$(npm root -g)/npm/bin/npx-cli.js"
 mkdir -p "$PAPERCLIP_HOME"
 chmod 700 "$PAPERCLIP_HOME"
 available_kb="$(df -Pk "$PAPERCLIP_HOME" | awk 'NR==2 {print $4}')"
-if (( available_kb < 10 * 1024 * 1024 )); then
-  echo 'Allow at least 10 GiB free for installation and temporary files (conservative budget).' >&2
+min_free_gib="${PAPERCLIP_MIN_FREE_GIB:-10}"
+if [[ ! "$min_free_gib" =~ ^[1-9][0-9]?$ ]]; then
+  echo 'PAPERCLIP_MIN_FREE_GIB must be an integer from 1 to 99.' >&2
+  exit 1
+fi
+if (( available_kb < min_free_gib * 1024 * 1024 )); then
+  echo "Allow at least $min_free_gib GiB free for installation and temporary files (conservative budget)." >&2
   exit 1
 fi
 cd "$PAPERCLIP_HOME"

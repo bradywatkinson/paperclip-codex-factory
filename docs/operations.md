@@ -150,3 +150,7 @@ Managed installs retain two previous payloads and support `./scripts/paperclip u
 ## Upstream contracts
 
 This setup uses supported managed installation, instance configuration, service, and database-backup interfaces. No Paperclip core changes or experimental agent orchestration commands are required. Consult the [installation](https://docs.paperclip.ing/reference/cli/installation/), [service](https://docs.paperclip.ing/reference/cli/service/), [authentication](https://docs.paperclip.ing/how-to/enable-multi-user-login/), and [backup](https://docs.paperclip.ing/how-to/back-up-and-restore-a-company/) documentation when changing the pin.
+
+## Disk budget override
+
+Bootstrap defaults to a conservative 10 GiB free-space budget. This is not an upstream minimum. For a deliberate retry on a smaller disk, `PAPERCLIP_MIN_FREE_GIB=4 ./scripts/bootstrap` lowers only that preflight threshold. It does not limit extraction size or guarantee the installation fits. Watch available space and stop if it approaches exhaustion; never delete unrelated files to satisfy the check.
