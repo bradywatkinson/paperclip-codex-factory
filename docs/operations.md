@@ -4,10 +4,10 @@ Run repository commands from this checkout. `./scripts/paperclip` defaults to th
 
 ## Installation
 
-Install Node.js `24.14.0` for macOS arm64 from [the official release](https://nodejs.org/dist/v24.14.0/). Alternatively, with an existing working npm installation, install an isolated runtime without changing global npm configuration:
+Install Node.js `24.15.0` for macOS arm64 from [the official release](https://nodejs.org/dist/v24.15.0/). Alternatively, with an existing working npm installation, install an isolated runtime without changing global npm configuration:
 
 ```sh
-npm --cache "$HOME/.cache/npm" install --prefix "$HOME/.local/share/paperclip-runtime" node@24.14.0
+npm --cache "$HOME/.cache/npm" install --prefix "$HOME/.local/share/paperclip-runtime" node@24.15.0
 export PATH="$HOME/.local/share/paperclip-runtime/node_modules/node/bin:$HOME/.local/bin:$PATH"
 export PAPERCLIP_NODE="$HOME/.local/share/paperclip-runtime/node_modules/node/bin/node"
 export npm_config_cache="$HOME/.cache/npm"

@@ -4,7 +4,7 @@ Run this procedure as the desktop user on an Apple Silicon Mac without an existi
 
 ## Install and persistence
 
-1. Install Node.js `24.14.0` at a stable path. Record macOS version, `uname -m`, `node --version`, and `command -v node`. Check free space: at least 10 GiB is recommended as estimated installation/build/cache headroom, not a verified minimum. Confirm no unintended `PAPERCLIP_HOME` or `PAPERCLIP_INSTANCE_ID` overrides are set.
+1. Install Node.js `24.15.0` at a stable path. Record macOS version, `uname -m`, `node --version`, and `command -v node`. Check free space: at least 10 GiB is recommended as estimated installation/build/cache headroom, not a verified minimum. Confirm no unintended `PAPERCLIP_HOME` or `PAPERCLIP_INSTANCE_ID` overrides are set.
 2. Clone this repository and run `./scripts/bootstrap`. Record the exact repository commit and installed Paperclip version. Confirm it matches `2026.1023.0`.
 3. Run `./scripts/paperclip onboard` interactively: choose Quickstart, decline background-service installation, and decline **Start Paperclip now**. Do not use `onboard --yes`, which starts the server in this release. Apply `"${PAPERCLIP_NODE:-node}" scripts/configure-local.mjs "$HOME/.paperclip/instances/factory/config.json"` before any server run, then run `./scripts/paperclip doctor`. Confirm instance `factory` and persistent root `~/.paperclip/instances/factory`. Start the first foreground run with `./scripts/paperclip run` only after the authenticated config is applied.
 4. Inspect the listener with `lsof -nP -iTCP:8100 -sTCP:LISTEN`. It must bind `127.0.0.1`, not `*`, a LAN address, or an unintended port. Check `http://127.0.0.1:8100/api/health` responds successfully. Health alone does not prove authentication.

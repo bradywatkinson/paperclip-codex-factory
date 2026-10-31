@@ -7,7 +7,7 @@ Initial scope: persistent storage, authenticated local UI, backups, and a macOS 
 ## Versions and prerequisites
 
 - Paperclip: `2026.1023.0`, installed through its supported managed installer.
-- Node.js: `24.14.0` reference runtime; bootstrap requires at least `24.11.0`.
+- Node.js: `24.15.0` reference runtime; bootstrap requires at least `24.15.0` for current transitive dependencies.
 - Apple Silicon macOS, Git, npm/npx, and a signed-in desktop user for the LaunchAgent.
 - Bootstrap requires 10 GiB free disk for install/build/cache headroom; this is a conservative budget, not a measured upstream minimum.
 

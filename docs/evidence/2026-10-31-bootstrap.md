@@ -38,3 +38,19 @@ Shell syntax, JavaScript parsing, configuration behavior, and failure handling a
 All live acceptance checks remain pending: managed installation/doctor, authenticated UI and anonymous denial, goals/projects/tasks, agent assignments, approvals/rejections, persistence, backup and restore, service registration and restart after login.
 
 Next: provide at least 10 GiB free (a conservative bootstrap budget, not a measured upstream requirement), rerun the documented installation, then complete [the smoke test](../smoke-test.md). Retain this failed attempt as evidence; add a later verified result instead of rewriting it as success. No evidence has been posted to GitHub.
+
+## Retry after additional space became available
+
+A subsequent user-requested retry started with 5.1 GiB free. Added an explicit `PAPERCLIP_MIN_FREE_GIB` override while retaining the conservative 10 GiB default, then attempted the exact same release with a 4 GiB preflight threshold. Dependency extraction reached approximately 2 GiB before the execution tool terminated the process with:
+
+```text
+Network access to "nodejs.org" was blocked: domain is not on the allowlist for the current sandbox mode.
+```
+
+The npm log ended during the `cpu-features@0.0.10` native installation hook (`node-gyp rebuild`), without a completion footer. Node header download is the likely denied operation; that attribution is inferred from the hook, not a captured request URL. No network-policy bypass was attempted.
+
+Current transitive dependencies also reported requiring Node 24.15 (`jsdom`, among others). Installed Node 24.15.0 separately at `~/.local/share/paperclip-runtime-next/node_modules/node/bin/node`; the original runtime and user's default Node remain unchanged. Updated the repository reference and bootstrap prerequisite to 24.15. The top-level Paperclip release remains pinned, but upstream transitive dependencies are not locked by this repository.
+
+Automatic approval review rejected a concurrent replacement of the original isolated runtime because of disk exhaustion risk; the separate 24.15 runtime already installed can be used instead. It also rejected the external memory lookup as an unverified destination; repository and conversation context sufficed.
+
+Removed only this retry's partial npx extraction. No managed payload, shim, factory config, server, or service was created. The next retry needs permitted access to `nodejs.org` for native prerequisites and sufficient disk space. Use `PAPERCLIP_NODE="$HOME/.local/share/paperclip-runtime-next/node_modules/node/bin/node"` on this Mac. All live acceptance checks remain pending.
