@@ -1,0 +1,63 @@
+# Paperclip Codex Factory
+
+A reusable, local Paperclip coordination service for an Apple Silicon Mac. The control plane lives outside application repositories; this repository holds its version pins, setup scripts, and operating procedures.
+
+Initial scope: persistent storage, authenticated local UI, backups, and a macOS login service. Application integration, production deployments, and automatic merges are outside this foundation.
+
+## Versions and prerequisites
+
+- Paperclip: `2026.1023.0`, installed through its supported managed installer.
+- Node.js: `24.14.0` reference runtime; bootstrap requires at least `24.11.0`.
+- Apple Silicon macOS, Git, npm/npx, and a signed-in desktop user for the LaunchAgent.
+- Bootstrap requires 10 GiB free disk for install/build/cache headroom; this is a conservative budget, not a measured upstream minimum.
+
+Keep the Node executable at a stable path: Paperclip's managed shim records its absolute path, and launchd does not load shell version managers. Put the chosen Node `bin` directory first on `PATH`; `PAPERCLIP_NODE` may select its absolute executable for repository scripts.
+
+## Start here
+
+```sh
+git clone https://github.com/bradywatkinson/paperclip-codex-factory.git
+cd paperclip-codex-factory
+node --version
+./scripts/bootstrap
+./scripts/paperclip onboard
+# Choose Quickstart; decline BOTH service installation and “Start Paperclip now”.
+"${PAPERCLIP_NODE:-node}" scripts/configure-local.mjs "$HOME/.paperclip/instances/factory/config.json"
+./scripts/paperclip doctor
+./scripts/paperclip run
+# After claiming the board and completing the initial UI checks, stop with Control-C:
+./scripts/paperclip service install --instance factory
+./scripts/paperclip service status --instance factory --json
+```
+
+Follow the foreground startup output to claim the authenticated board in your browser at `http://127.0.0.1:3100`. Claim links contain credentials; keep them out of commits and issue evidence. Install the login service after that first UI check. See [operations](docs/operations.md) for installation details and [the fresh-Mac smoke test](docs/smoke-test.md) for acceptance checks.
+
+Bootstrap only installs the managed CLI. Do not start Paperclip until onboarding has finished and `configure-local.mjs` has applied authentication. In this release, `onboard --yes` starts the foreground server and offers no `--no-run` switch, so use the interactive choices above.
+
+The wrapper defaults to `PAPERCLIP_HOME=$HOME/.paperclip` and `PAPERCLIP_INSTANCE_ID=factory`; existing environment overrides select a different scope only when intentional. Managed code lives in `~/.paperclip/cli`, the stable CLI entrypoint is `~/.local/bin/paperclipai`, and instance state lives in `~/.paperclip/instances/factory`. No application checkout is the service's working storage.
+
+## Verification status
+
+The version pin is a candidate until the live smoke-test evidence is recorded. The first install attempt was blocked by `ENOSPC`; no live server was verified. Do not infer a working login, UI workflow, reboot recovery, or successful restore from script checks alone. See the [dated install attempt](docs/evidence/2026-10-31-bootstrap.md). Record completed checks and remaining manual checks in [smoke-test evidence](docs/smoke-test.md#evidence).
+
+Issue: [#1 — Bootstrap Paperclip local control plane](https://github.com/bradywatkinson/paperclip-codex-factory/issues/1).
+
+## Local checks
+
+```sh
+bash -n scripts/bootstrap scripts/paperclip
+node --check scripts/configure-local.mjs
+node --test tests/configure-local.test.mjs
+```
+
+The tests need loopback port `3100` available and use disposable configuration files and an inert CLI fixture.
+
+## Upstream references
+
+- [Managed installation](https://docs.paperclip.ing/reference/cli/installation/)
+- [Service lifecycle](https://docs.paperclip.ing/reference/cli/service/)
+- [Enable multi-user login](https://docs.paperclip.ing/how-to/enable-multi-user-login/)
+- [Database](https://docs.paperclip.ing/deploy/database/)
+- [Backup and restore](https://docs.paperclip.ing/how-to/back-up-and-restore-a-company/)
+
+Upstream documentation may describe newer versions. This repository's scripts and recorded evidence apply to the pinned release.
