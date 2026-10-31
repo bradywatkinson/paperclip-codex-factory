@@ -30,11 +30,11 @@ node --version
 ./scripts/paperclip service status --instance factory --json
 ```
 
-Follow the foreground startup output to claim the authenticated board in your browser at `http://127.0.0.1:3100`. Claim links contain credentials; keep them out of commits and issue evidence. Install the login service after that first UI check. See [operations](docs/operations.md) for installation details and [the fresh-Mac smoke test](docs/smoke-test.md) for acceptance checks.
+Follow the foreground startup output to claim the authenticated board in your browser at `http://127.0.0.1:8100`. Claim links contain credentials; keep them out of commits and issue evidence. Install the login service after that first UI check. See [operations](docs/operations.md) for installation details and [the fresh-Mac smoke test](docs/smoke-test.md) for acceptance checks.
 
 Bootstrap only installs the managed CLI. Do not start Paperclip until onboarding has finished and `configure-local.mjs` has applied authentication. In this release, `onboard --yes` starts the foreground server and offers no `--no-run` switch, so use the interactive choices above.
 
-The wrapper defaults to `PAPERCLIP_HOME=$HOME/.paperclip` and `PAPERCLIP_INSTANCE_ID=factory`; existing environment overrides select a different scope only when intentional. Managed code lives in `~/.paperclip/cli`, the stable CLI entrypoint is `~/.local/bin/paperclipai`, and instance state lives in `~/.paperclip/instances/factory`. No application checkout is the service's working storage.
+The wrapper defaults to `PORT=8100`, `PAPERCLIP_HOME=$HOME/.paperclip` and `PAPERCLIP_INSTANCE_ID=factory`; existing environment overrides select a different scope only when intentional. Managed code lives in `~/.paperclip/cli`, the stable CLI entrypoint is `~/.local/bin/paperclipai`, and instance state lives in `~/.paperclip/instances/factory`. No application checkout is the service's working storage.
 
 ## Verification status
 
@@ -50,7 +50,7 @@ node --check scripts/configure-local.mjs
 node --test tests/configure-local.test.mjs
 ```
 
-The tests need loopback port `3100` available and use disposable configuration files and an inert CLI fixture.
+The tests need loopback port `8100` available and use disposable configuration files and an inert CLI fixture.
 
 ## Upstream references
 

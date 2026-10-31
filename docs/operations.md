@@ -44,12 +44,12 @@ The intended server configuration is:
 | --- | --- |
 | Deployment mode | `authenticated` |
 | Exposure | `private` |
-| Host / port | `127.0.0.1:3100` |
-| Public browser origin | `http://127.0.0.1:3100` |
+| Host / port | `127.0.0.1:8100` |
+| Public browser origin | `http://127.0.0.1:8100` |
 | Database | Embedded PostgreSQL, persistent instance directory |
 | Secret provider | Local encrypted store |
 
-If configuration needs interactive repair, stop the service, then run `./scripts/paperclip configure --section server`. Select Custom reachability, port `3100`, Authenticated, Private network, and bind host `127.0.0.1`. Keep the browser origin consistent. Run `doctor` before restarting.
+If configuration needs interactive repair, stop the service, then run `./scripts/paperclip configure --section server`. Select Custom reachability, port `8100`, Authenticated, Private network, and bind host `127.0.0.1`. Keep the browser origin consistent. Run `doctor` before restarting.
 
 Start the first run in the foreground with `./scripts/paperclip run`. First authenticated startup prints a board ownership claim URL. Open it locally, create or sign into your human account, and claim ownership. Store the account password in your password manager. Verify a private browser window cannot access board data without signing in. The claim URL and code are secrets.
 
@@ -90,7 +90,7 @@ For foreground troubleshooting, stop the LaunchAgent first and run `./scripts/pa
 | `~/.paperclip/instances/factory/logs/` | Runtime logs |
 | `~/.paperclip/instances/factory/workspaces/` | Default agent workspaces |
 
-`PAPERCLIP_HOME` chooses the base home and `PAPERCLIP_INSTANCE_ID` chooses the instance; the wrapper preserves explicitly set values. `PAPERCLIP_NODE` is this repository's Node selector. Do not accidentally point these at an application checkout. Environment overrides such as `PAPERCLIP_DEPLOYMENT_MODE` can supersede config; remove conflicting overrides during verification.
+`PAPERCLIP_HOME` chooses the base home and `PAPERCLIP_INSTANCE_ID` chooses the instance; the wrapper preserves explicitly set values. `PAPERCLIP_NODE` is this repository's Node selector. The wrapper defaults `PORT=8100`, including during onboarding; clear any conflicting `PORT` override to use the default. Do not accidentally point these at an application checkout. Environment overrides such as `PAPERCLIP_DEPLOYMENT_MODE` can supersede config; remove conflicting overrides during verification.
 
 The generated instance `.env` contains `PAPERCLIP_AGENT_JWT_SECRET`, used by Paperclip's authentication setup. Preserve it across restarts and restores. If explicitly setting `BETTER_AUTH_SECRET`, generate and store it locally, never in tracked files. Do not paste credentials into shell command arguments, commit them, or include them in evidence. Use Paperclip's supported secret UI/provider references for future agent credentials. No provider credential is required merely to operate the local board.
 

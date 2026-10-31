@@ -7,7 +7,7 @@ Run this procedure as the desktop user on an Apple Silicon Mac without an existi
 1. Install Node.js `24.14.0` at a stable path. Record macOS version, `uname -m`, `node --version`, and `command -v node`. Check free space: at least 10 GiB is recommended as estimated installation/build/cache headroom, not a verified minimum. Confirm no unintended `PAPERCLIP_HOME` or `PAPERCLIP_INSTANCE_ID` overrides are set.
 2. Clone this repository and run `./scripts/bootstrap`. Record the exact repository commit and installed Paperclip version. Confirm it matches `2026.1023.0`.
 3. Run `./scripts/paperclip onboard` interactively: choose Quickstart, decline background-service installation, and decline **Start Paperclip now**. Do not use `onboard --yes`, which starts the server in this release. Apply `"${PAPERCLIP_NODE:-node}" scripts/configure-local.mjs "$HOME/.paperclip/instances/factory/config.json"` before any server run, then run `./scripts/paperclip doctor`. Confirm instance `factory` and persistent root `~/.paperclip/instances/factory`. Start the first foreground run with `./scripts/paperclip run` only after the authenticated config is applied.
-4. Inspect the listener with `lsof -nP -iTCP:3100 -sTCP:LISTEN`. It must bind `127.0.0.1`, not `*`, a LAN address, or an unintended port. Check `http://127.0.0.1:3100/api/health` responds successfully. Health alone does not prove authentication.
+4. Inspect the listener with `lsof -nP -iTCP:8100 -sTCP:LISTEN`. It must bind `127.0.0.1`, not `*`, a LAN address, or an unintended port. Check `http://127.0.0.1:8100/api/health` responds successfully. Health alone does not prove authentication.
 5. Use the startup ownership link to create/sign into a human account and claim the board. Keep the full link, code, password, cookies, and raw logs out of evidence. Open a private browser window at the ordinary board URL and verify it requires authentication and cannot read board data.
 
 ## Goals, tasks, assignments, and approvals
@@ -22,7 +22,7 @@ Use the UI labels exposed by the pinned release; record any differences encounte
 
 ## Restart and login service
 
-1. Stop the foreground run with Control-C. Install the service using `./scripts/paperclip service install --instance factory`; check `./scripts/paperclip service status --instance factory --json`. Stop it using `./scripts/paperclip service stop --instance factory`. Confirm port `3100` no longer serves the app.
+1. Stop the foreground run with Control-C. Install the service using `./scripts/paperclip service install --instance factory`; check `./scripts/paperclip service status --instance factory --json`. Stop it using `./scripts/paperclip service stop --instance factory`. Confirm port `8100` no longer serves the app.
 2. Start it with `./scripts/paperclip service start --instance factory`. Sign in again if needed and verify the company, goal, task assignment, attachment, and approval decisions persist.
 3. Sign out of macOS and sign back in, or reboot and log in. Without manually starting Paperclip, check service status, loopback binding, authentication, and the saved records. This is the acceptance check for restart on login.
 

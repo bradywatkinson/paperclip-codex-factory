@@ -3,6 +3,7 @@
 set -euo pipefail
 export PAPERCLIP_HOME="${PAPERCLIP_HOME:-$HOME/.paperclip}"
 export PAPERCLIP_INSTANCE_ID="${PAPERCLIP_INSTANCE_ID:-factory}"
+export PORT="${PORT:-8100}"
 cli="${PAPERCLIP_CLI:-$HOME/.local/bin/paperclipai}"
 if [[ ! -x "$cli" ]]; then
   echo "Paperclip is not installed. See README.md." >&2

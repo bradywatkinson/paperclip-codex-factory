@@ -29,6 +29,8 @@ Inspection of the downloaded `2026.1023.0` CLI bundle showed that `onboard --yes
 
 ## Local verification
 
+User-selected default is authenticated loopback at `http://127.0.0.1:8100`. The wrapper supplies `PORT=8100` during onboarding, and the generated config is checked before first startup.
+
 Shell syntax, JavaScript parsing, configuration behavior, and failure handling are covered by repository checks. See the test command in README. These checks do not prove a working Paperclip installation.
 
 ## Remaining acceptance
