@@ -42,6 +42,7 @@ test('configuration protects persistent state and refuses a live server', async 
     const { dir, config } = await fixture(t, JSON.stringify({
       server: { port: 8100, customBindHost: '0.0.0.0', unrelated: 'keep' },
       auth: { disableSignUp: true, publicBaseUrl: 'https://old.invalid' },
+      telemetry: { enabled: true, unrelated: 'keep' },
       database: { connectionString: secret },
     }));
     let previous;
@@ -56,6 +57,7 @@ test('configuration protects persistent state and refuses a live server', async 
         allowedHostnames: [], serveUi: true,
       });
       assert.deepEqual(actual.auth, { disableSignUp: true, baseUrlMode: 'auto' });
+      assert.deepEqual(actual.telemetry, { enabled: false, unrelated: 'keep' });
       assert.equal(actual.database.connectionString, secret);
       assert.equal((await fs.stat(config)).mode & 0o777, 0o600);
       if (previous) assert.deepEqual(actual, previous);
@@ -68,7 +70,9 @@ test('configuration protects persistent state and refuses a live server', async 
     const { config } = await fixture(t, JSON.stringify({ server: {} }));
     const result = await run(config);
     assert.equal(result.code, 0, result.stderr);
-    assert.equal(JSON.parse(await fs.readFile(config, 'utf8')).auth.disableSignUp, false);
+    const actual = JSON.parse(await fs.readFile(config, 'utf8'));
+    assert.equal(actual.auth.disableSignUp, false);
+    assert.equal(actual.telemetry.enabled, false);
   });
 
   await t.test('malformed config is unchanged and errors redact contents', async t => {

@@ -39,7 +39,7 @@ The wrapper defaults to `PORT=8100`, `PAPERCLIP_HOME=$HOME/.paperclip` and `PAPE
 
 ## Verification status
 
-The version pin is a candidate until the live smoke-test evidence is recorded. The first install attempt was blocked by `ENOSPC`; no live server was verified. Do not infer a working login, UI workflow, reboot recovery, or successful restore from script checks alone. See the [dated install attempt](docs/evidence/2026-10-31-bootstrap.md). Record completed checks and remaining manual checks in [smoke-test evidence](docs/smoke-test.md#evidence).
+The pinned global package is installed and reports `2026.1023.0`; `doctor` passed all 12 checks. Live startup remains blocked in this session: embedded PostgreSQL initialization gets a shared-memory permission error, and native LaunchAgent registration returns macOS error 5. The service file is installed and enabled but inactive. UI, backup/restore, and login recovery remain unverified. See [dated evidence](docs/evidence/2026-10-31-bootstrap.md) and [the smoke-test checklist](docs/smoke-test.md#evidence).
 
 Issue: [#1 — Bootstrap Paperclip local control plane](https://github.com/bradywatkinson/paperclip-codex-factory/issues/1).
 

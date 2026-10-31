@@ -39,13 +39,13 @@ Record observed results rather than checking off expected behavior. Redact passw
 | Check | Status | Evidence |
 | --- | --- | --- |
 | Pinned selected install and doctor | Blocked | Initial install hit `ENOSPC`; no live server or doctor verified |
-| Loopback binding and health | Pending | Await live check |
+| Loopback binding and health | Blocked | PostgreSQL shared-memory denial; service registration error 5 |
 | Human login and anonymous denial | Pending | Await browser check |
 | Goal and task persistence | Pending | Await browser check |
 | Agent assignment | Pending | Await browser check |
 | Approval and rejection | Pending | Await pending-request workflow |
 | Stop/start persistence | Pending | Await live check |
-| Restart after macOS login | Pending | Requires logout/login or reboot |
+| Restart after macOS login | Pending | Valid LaunchAgent installed/enabled, inactive; requires Terminal start then login test |
 | Logical dump and stopped full backup | Pending | Await backup verification |
 | Restore including files and secrets | Pending | Await recovery rehearsal |
 

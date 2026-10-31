@@ -18,7 +18,7 @@ async function temporaryHome(t) {
 
 function cleanEnv(home) {
   const env = { ...process.env, HOME: home };
-  for (const key of ['PAPERCLIP_CLI', 'PAPERCLIP_SHIM_PATH', 'PAPERCLIP_HOME', 'PAPERCLIP_INSTANCE_ID', 'PORT']) delete env[key];
+  for (const key of ['PAPERCLIP_CLI', 'PAPERCLIP_SHIM_PATH', 'PAPERCLIP_HOME', 'PAPERCLIP_INSTANCE_ID', 'PORT', 'PAPERCLIP_TELEMETRY_DISABLED']) delete env[key];
   return env;
 }
 
@@ -29,16 +29,16 @@ test('wrapper prefers global launcher and selects it for native services', async
   await fs.mkdir(path.dirname(launcher), { recursive: true });
   await fs.mkdir(path.dirname(managed), { recursive: true });
   await fs.mkdir(path.join(home, '.paperclip'));
-  await fs.writeFile(launcher, '#!/bin/sh\nprintf "%s\\n" global "$PAPERCLIP_SHIM_PATH" "$@"\n', { mode: 0o700 });
+  await fs.writeFile(launcher, '#!/bin/sh\nprintf "%s\\n" global "$PAPERCLIP_SHIM_PATH" "$PAPERCLIP_TELEMETRY_DISABLED" "$@"\n', { mode: 0o700 });
   await fs.writeFile(managed, '#!/bin/sh\necho managed\n', { mode: 0o700 });
   const options = { env: cleanEnv(home) };
   const global = await exec('/bin/bash', [path.join(root, 'scripts/paperclip'), 'service', 'status'], options);
-  assert.deepEqual(global.stdout.trimEnd().split('\n'), ['global', launcher, 'service', 'status']);
+  assert.deepEqual(global.stdout.trimEnd().split('\n'), ['global', launcher, '1', 'service', 'status']);
   const explicitShim = path.join(home, 'explicit-service-launcher');
   const explicit = await exec('/bin/bash', [path.join(root, 'scripts/paperclip')], {
     env: { ...options.env, PAPERCLIP_CLI: launcher, PAPERCLIP_SHIM_PATH: explicitShim },
   });
-  assert.deepEqual(explicit.stdout.trimEnd().split('\n'), ['global', explicitShim]);
+  assert.deepEqual(explicit.stdout.trimEnd().split('\n'), ['global', explicitShim, '1']);
   await fs.rm(launcher);
   const fallback = await exec('/bin/bash', [path.join(root, 'scripts/paperclip')], options);
   assert.equal(fallback.stdout.trim(), 'managed');

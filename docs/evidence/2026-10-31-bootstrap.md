@@ -54,3 +54,45 @@ Current transitive dependencies also reported requiring Node 24.15 (`jsdom`, amo
 Automatic approval review rejected a concurrent replacement of the original isolated runtime because of disk exhaustion risk; the separate 24.15 runtime already installed can be used instead. It also rejected the external memory lookup as an unverified destination; repository and conversation context sufficed.
 
 Removed only this retry's partial npx extraction. No managed payload, shim, factory config, server, or service was created. The next retry needs permitted access to `nodejs.org` for native prerequisites and sufficient disk space. Use `PAPERCLIP_NODE="$HOME/.local/share/paperclip-runtime-next/node_modules/node/bin/node"` on this Mac. All live acceptance checks remain pending.
+
+## Successful package installation and current runtime blocker
+
+A further continuation found matching Node 24.15 headers already present in the installed npm runtime. Supplying their directory through supported `npm_config_nodedir` let native compilation finish without accessing the blocked domain. The managed installer then began a second package copy while disk space approached 1.4 GiB; stopped it before exhaustion and removed only that interrupted install's staging/extraction.
+
+Used the supported traditional global npm installation with one dedicated payload instead:
+
+```sh
+PAPERCLIP_NODE="$HOME/.local/share/paperclip-runtime-next/node_modules/node/bin/node" \
+npm_config_nodedir="$HOME/.local/share/paperclip-runtime-next/node_modules/node/node_modules/node-bin-darwin-arm64" \
+PAPERCLIP_INSTALL_METHOD=global PAPERCLIP_MIN_FREE_GIB=3 \
+NODE_USE_ENV_PROXY=1 ./scripts/bootstrap
+```
+
+Observed: **437 packages installed**, exit 0. `./scripts/paperclip --version` reports **2026.1023.0**. Persistent package prefix is `~/.local/share/paperclip-global`; the stable launcher `~/.local/share/paperclip-factory/bin/paperclipai` pins absolute Node 24.15 and its child PATH. Reclaimed the install attempts' npm download cache after installation; later disk check showed 4.1 GiB free.
+
+Interactive `onboard --no-install-service` created factory configuration, authentication secrets, local encryption key, persistent directories, and port 8100 defaults, without a model provider. Declined immediate startup. Its optional telemetry request was blocked; disabled telemetry using supported `PAPERCLIP_TELEMETRY_DISABLED=1` and `telemetry.enabled=false` before subsequent CLI/server commands. Configured authenticated/private loopback access before attempting runtime startup.
+
+`doctor` exited 0 with **12 passed**: valid config, authenticated loopback mode, JWT presence, local encryption key, writable storage/logs, embedded PostgreSQL configuration, optional no-LLM state, available 8100 port, Node 24.15, optional managed-install absence, and service diagnostics. Doctor does not initialize or verify the running database.
+
+Foreground server failed before HTTP startup. Isolated probes with the exact packaged `initdb`, both ordinary and escalated, reproduced:
+
+```text
+FATAL: could not create shared memory segment: Operation not permitted
+DETAIL: Failed system call was shmget(...).
+```
+
+Disposable probes cleaned up. Failed factory initialization also cleaned its database directory; no business records exist. No claim URL was generated and no account or provider credential was created.
+
+Native `service install --instance factory` wrote a valid LaunchAgent, enabled it, but failed to start it. Status reports installed=true, enabled=true, active=false, pid=null. Direct registration returned `Bootstrap failed: 5: Input/output error`. Plist, executable paths, owner permissions, GUI domain, and writable logs were checked; no malformed configuration found. No service log files were created. System-log inspection was itself denied with `Cannot run while sandboxed`; a session restriction is likely but the exact launchd rejection cause remains unverified.
+
+LaunchAgent: `~/Library/LaunchAgents/ing.paperclip.paperclipai.factory.plist`.
+
+Next runtime check must run in a normal Terminal:
+
+```sh
+cd /Users/bradyw/dev/paperclip-codex-factory
+./scripts/paperclip service start --instance factory
+./scripts/paperclip service status --instance factory --json
+```
+
+Then check health on `http://127.0.0.1:8100/api/health` and complete the manual UI, persistence, backup/restore and login-start checks. Browser automation also reported an unavailable browser access host in this session, so no visual UI acceptance was performed. All eight local regression tests and syntax/whitespace checks passed. Evidence remains local; nothing was published to GitHub and issue #1 remains incomplete.
