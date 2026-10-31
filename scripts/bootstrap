@@ -3,7 +3,7 @@ set -euo pipefail
 umask 077
 root="$(cd "$(dirname "$0")/.." && pwd)"
 version="$(cat "$root/paperclip-version")"
-node="$(command -v node)"
+node="${PAPERCLIP_NODE:-$(command -v node)}"
 "$node" -e 'const [a,b]=process.versions.node.split(".").map(Number); if(a<24 || (a===24 && b<11)) { console.error("Paperclip requires Node >=24.11; see README.md"); process.exit(1); }'
 export PAPERCLIP_HOME="${PAPERCLIP_HOME:-$HOME/.paperclip}"
 export PAPERCLIP_INSTANCE_ID="${PAPERCLIP_INSTANCE_ID:-factory}"
@@ -14,11 +14,12 @@ npx_cli="$(npm root -g)/npm/bin/npx-cli.js"
 [[ -f "$npx_cli" ]] || { echo 'Cannot locate npm npx-cli.js' >&2; exit 1; }
 mkdir -p "$PAPERCLIP_HOME"
 chmod 700 "$PAPERCLIP_HOME"
+available_kb="$(df -Pk "$PAPERCLIP_HOME" | awk 'NR==2 {print $4}')"
+if (( available_kb < 10 * 1024 * 1024 )); then
+  echo 'Allow at least 10 GiB free for installation and temporary files (conservative budget).' >&2
+  exit 1
+fi
 cd "$PAPERCLIP_HOME"
 "$node" "$npx_cli" --yes --registry=https://registry.npmjs.org "paperclipai@$version" install --version "$version" --yes
-config="$PAPERCLIP_HOME/instances/$PAPERCLIP_INSTANCE_ID/config.json"
-if [[ ! -e "$config" ]]; then
-  "$HOME/.local/bin/paperclipai" onboard --yes --no-install-service
-fi
-"$node" "$root/scripts/configure-local.mjs" "$config"
-echo 'Configured. Review README.md, then start the foreground server with scripts/paperclip run.'
+echo 'Installed. Next run scripts/paperclip onboard interactively.'
+echo 'Decline service installation and immediate startup, then follow README.md to configure authentication.'
