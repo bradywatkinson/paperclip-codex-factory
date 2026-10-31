@@ -7,7 +7,7 @@ Initial scope: persistent storage, authenticated local UI, backups, and a macOS 
 ## Versions and prerequisites
 
 - Paperclip: `2026.1023.0`, installed through the supported managed installer or an optional global npm installation.
-- Node.js: `24.15.0` reference runtime; bootstrap requires at least `24.15.0` for current transitive dependencies.
+- Node.js: `24.15.0` reference runtime; bootstrap accepts Node 24.x at `24.15.0` or newer, or Node 26 and newer, for current transitive dependencies. Node 25 is excluded.
 - Apple Silicon macOS, Git, npm/npx, and a signed-in desktop user for the LaunchAgent.
 - Bootstrap requires 10 GiB free disk for install/build/cache headroom; this is a conservative budget, not a measured upstream minimum.
 
@@ -31,7 +31,7 @@ export PAPERCLIP_TELEMETRY_DISABLED=1
 ./scripts/paperclip service status --instance factory --json
 ```
 
-Follow the foreground startup output to claim the authenticated board in your browser at `http://127.0.0.1:8100`. Claim links contain credentials; keep them out of commits and issue evidence. Install the login service after that first UI check. See [operations](docs/operations.md) for installation details and [the fresh-Mac smoke test](docs/smoke-test.md) for acceptance checks.
+Open `http://127.0.0.1:8100`, select **Sign in / Create account**, then select **Claim this instance** after signing in to become the first administrator. This private-instance flow does not require copying a claim link from logs. Any startup claim links contain credentials; keep them out of commits and issue evidence. Install the login service after that first UI check. See [operations](docs/operations.md) for installation details and [the fresh-Mac smoke test](docs/smoke-test.md) for acceptance checks.
 
 Bootstrap only installs the CLI. For a single-payload alternative to managed installation, run `PAPERCLIP_INSTALL_METHOD=global ./scripts/bootstrap`; see [installation methods](docs/operations.md#global-npm-alternative). Do not start Paperclip until onboarding has finished and `configure-local.mjs` has applied authentication. In this release, `onboard --yes` starts the foreground server and offers no `--no-run` switch, so use the interactive choices above.
 
@@ -39,7 +39,7 @@ The wrapper defaults to `PORT=8100`, `PAPERCLIP_HOME=$HOME/.paperclip` and `PAPE
 
 ## Verification status
 
-The pinned global package is installed and reports `2026.1023.0`; `doctor` passed all 12 checks. Live startup remains blocked in this session: embedded PostgreSQL initialization gets a shared-memory permission error, and native LaunchAgent registration returns macOS error 5. The service file is installed and enabled but inactive. UI, backup/restore, and login recovery remain unverified. See [dated evidence](docs/evidence/2026-10-31-bootstrap.md) and [the smoke-test checklist](docs/smoke-test.md#evidence).
+Paperclip `2026.1023.0` is installed and running as the enabled macOS LaunchAgent at `http://127.0.0.1:8100`. Health and loopback binding pass; `doctor` passed 12 checks, and the initial logical database backup passed integrity verification. First-owner account setup, visual coordination workflows, full restore, and logout/login recovery remain pending. See [dated evidence](docs/evidence/2026-10-31-bootstrap.md) and [the smoke-test checklist](docs/smoke-test.md#evidence).
 
 Issue: [#1 — Bootstrap Paperclip local control plane](https://github.com/bradywatkinson/paperclip-codex-factory/issues/1).
 

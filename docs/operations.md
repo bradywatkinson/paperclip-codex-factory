@@ -52,7 +52,7 @@ The intended server configuration is:
 
 If configuration needs interactive repair, stop the service, then run `./scripts/paperclip configure --section server`. Select Custom reachability, port `8100`, Authenticated, Private network, and bind host `127.0.0.1`. Keep the browser origin consistent. Run `doctor` before restarting.
 
-Start the first run in the foreground with `./scripts/paperclip run`. First authenticated startup prints a board ownership claim URL. Open it locally, create or sign into your human account, and claim ownership. Store the account password in your password manager. Verify a private browser window cannot access board data without signing in. The claim URL and code are secrets.
+Start the first run in the foreground with `./scripts/paperclip run`, then open `http://127.0.0.1:8100`. In this pinned release, an authenticated/private instance with no administrator shows **Finish setting up this Paperclip**. Select **Sign in / Create account**, create or sign into your human account, then select **Claim this instance**. This flow is verified from the installed UI/server source; rendered browser verification remains a separate smoke-test step. Store the account password in your password manager. Verify a private browser window cannot access board data without signing in. Startup may also print a one-time ownership URL; its token and code are secrets, and this private first-admin flow does not require copying that URL into chat.
 
 After that UI check, stop the foreground server with Control-C, then install the login service:
 
@@ -173,13 +173,16 @@ Managed installs retain two previous payloads and support `./scripts/paperclip u
 
 ### Global npm upgrades
 
-Pause agents and take the same full backup first. Upgrade using the supported Node executable and the original prefix. With a reviewed exact version substituted for the placeholder:
+Pause agents and take the same full backup first. Select the supported Node executable explicitly with `PAPERCLIP_NODE` if your shell defaults to another version. The command below prepends its bin directory so npm lifecycle scripts use the same Node, and stops the service before replacing package files in place. If installation fails, leave the service stopped until the package is repaired. Upgrade using the original prefix. With a reviewed exact version substituted for the placeholder:
 
 ```sh
-"${PAPERCLIP_NODE:-node}" "$(npm root -g)/npm/bin/npm-cli.js" install --global \
+upgrade_node="${PAPERCLIP_NODE:-$(command -v node)}"
+export PATH="$(dirname "$upgrade_node"):$PATH"
+./scripts/paperclip service stop --instance factory
+"$upgrade_node" "$(npm root -g)/npm/bin/npm-cli.js" install --global \
   --prefix "$HOME/.local/share/paperclip-global" \
   --registry=https://registry.npmjs.org paperclipai@<reviewed-version> --no-audit --no-fund
-./scripts/paperclip service restart --instance factory --wait
+./scripts/paperclip service start --instance factory
 ./scripts/paperclip doctor
 ```
 

@@ -4,7 +4,7 @@ umask 077
 root="$(cd "$(dirname "$0")/.." && pwd)"
 version="$(cat "$root/paperclip-version")"
 node="${PAPERCLIP_NODE:-$(command -v node)}"
-"$node" -e 'const [a,b]=process.versions.node.split(".").map(Number); if(a<24 || (a===24 && b<15)) { console.error("Paperclip requires Node >=24.15; see README.md"); process.exit(1); }'
+"$node" -e 'const [a,b]=process.versions.node.split(".").map(Number); if(a<24 || (a===24 && b<15) || a===25) { console.error("Paperclip requires Node 24.15+ (24.x) or >=26; see README.md"); process.exit(1); }'
 export PAPERCLIP_HOME="${PAPERCLIP_HOME:-$HOME/.paperclip}"
 export PAPERCLIP_INSTANCE_ID="${PAPERCLIP_INSTANCE_ID:-factory}"
 export PATH="$(dirname "$node"):$HOME/.local/bin:$PATH"

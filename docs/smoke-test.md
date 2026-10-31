@@ -4,11 +4,11 @@ Run this procedure as the desktop user on an Apple Silicon Mac without an existi
 
 ## Install and persistence
 
-1. Install Node.js `24.15.0` at a stable path. Record macOS version, `uname -m`, `node --version`, and `command -v node`. Check free space: at least 10 GiB is recommended as estimated installation/build/cache headroom, not a verified minimum. Confirm no unintended `PAPERCLIP_HOME` or `PAPERCLIP_INSTANCE_ID` overrides are set.
+1. Install the reference Node.js `24.15.0` at a stable path. Bootstrap also accepts later Node 24.x releases or Node 26 and newer; Node 25 is excluded. Record macOS version, `uname -m`, `node --version`, and `command -v node`. Check free space: at least 10 GiB is recommended as estimated installation/build/cache headroom, not a verified minimum. Confirm no unintended `PAPERCLIP_HOME` or `PAPERCLIP_INSTANCE_ID` overrides are set.
 2. Clone this repository and run `./scripts/bootstrap`. Record the selected installation method (`managed` or `global`), exact repository commit, and installed Paperclip version. Confirm it matches `2026.1023.0`.
-3. Run `./scripts/paperclip onboard` interactively: choose Quickstart, decline background-service installation, and decline **Start Paperclip now**. Do not use `onboard --yes`, which starts the server in this release. Apply `"${PAPERCLIP_NODE:-node}" scripts/configure-local.mjs "$HOME/.paperclip/instances/factory/config.json"` before any server run, then run `./scripts/paperclip doctor`. Confirm instance `factory` and persistent root `~/.paperclip/instances/factory`. Start the first foreground run with `./scripts/paperclip run` only after the authenticated config is applied.
+3. Run `./scripts/paperclip onboard --no-install-service` interactively: choose Quickstart and decline **Start Paperclip now**. Do not use `onboard --yes`, which starts the server in this release. Apply `"${PAPERCLIP_NODE:-node}" scripts/configure-local.mjs "$HOME/.paperclip/instances/factory/config.json"` before any server run, then run `./scripts/paperclip doctor`. Confirm instance `factory` and persistent root `~/.paperclip/instances/factory`. Start the first foreground run with `./scripts/paperclip run` only after the authenticated config is applied.
 4. Inspect the listener with `lsof -nP -iTCP:8100 -sTCP:LISTEN`. It must bind `127.0.0.1`, not `*`, a LAN address, or an unintended port. Check `http://127.0.0.1:8100/api/health` responds successfully. Health alone does not prove authentication.
-5. Use the startup ownership link to create/sign into a human account and claim the board. Keep the full link, code, password, cookies, and raw logs out of evidence. Open a private browser window at the ordinary board URL and verify it requires authentication and cannot read board data.
+5. Open `http://127.0.0.1:8100`, select **Sign in / Create account**, create or sign into your human account, then select **Claim this instance**. This authenticated/private first-admin flow does not require the startup ownership link. Keep any ownership links/codes, passwords, cookies, and raw logs out of evidence. Open a private browser window at the ordinary board URL and verify it requires authentication and cannot read board data.
 
 ## Goals, tasks, assignments, and approvals
 
@@ -39,14 +39,14 @@ Record observed results rather than checking off expected behavior. Redact passw
 | Check | Status | Evidence |
 | --- | --- | --- |
 | Pinned selected install and doctor | Blocked | Initial install hit `ENOSPC`; no live server or doctor verified |
-| Loopback binding and health | Blocked | PostgreSQL shared-memory denial; service registration error 5 |
-| Human login and anonymous denial | Pending | Await browser check |
+| Loopback binding and health | Passed | Healthy API; lsof confirms 127.0.0.1:8100 only |
+| Human login and anonymous denial | Pending | UI serves; anonymous company request denied403 during bootstrap; first-owner account still pending |
 | Goal and task persistence | Pending | Await browser check |
 | Agent assignment | Pending | Await browser check |
 | Approval and rejection | Pending | Await pending-request workflow |
 | Stop/start persistence | Pending | Await live check |
-| Restart after macOS login | Pending | Valid LaunchAgent installed/enabled, inactive; requires Terminal start then login test |
-| Logical dump and stopped full backup | Pending | Await backup verification |
+| Restart after macOS login | Pending | LaunchAgent installed, enabled and active after Terminal start; logout/login still untested |
+| Logical dump and stopped full backup | Partial | Initial logical dump verified; stopped full copy remains pending |
 | Restore including files and secrets | Pending | Await recovery rehearsal |
 
 For each completed row, add the date, macOS/architecture, repository commit, Paperclip/Node versions, exact command or UI action, result, and a sanitized artifact reference. Failed or blocked checks remain visible with the next step needed; script tests cannot satisfy the UI or login-service rows.

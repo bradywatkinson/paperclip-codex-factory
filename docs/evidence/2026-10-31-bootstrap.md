@@ -96,3 +96,21 @@ cd /Users/bradyw/dev/paperclip-codex-factory
 ```
 
 Then check health on `http://127.0.0.1:8100/api/health` and complete the manual UI, persistence, backup/restore and login-start checks. Browser automation also reported an unavailable browser access host in this session, so no visual UI acceptance was performed. All eight local regression tests and syntax/whitespace checks passed. Evidence remains local; nothing was published to GitHub and issue #1 remains incomplete.
+
+## LaunchAgent running after normal-Terminal start
+
+The user ran the documented service start from a normal Terminal. launchd reported active=true, enabled=true, pid=25261. The immediate health check initially raced startup; the subsequent live check succeeded:
+
+- `/api/health`: HTTP200, status=ok, deploymentMode=authenticated, deploymentExposure=private.
+- Listener: Node bound **127.0.0.1:8100** (IPv4), verified with lsof.
+- Service status: installed=true, active=true, enabled=true, health.ok=true.
+- UI root: HTTP200. Anonymous `/api/companies`: HTTP403 while bootstrap pending. This proves that request did not disclose company data; it does not complete post-login/browser-session acceptance.
+- Server-reported commit: `1b4c803816e82b0265c8422e1a804327a7ed8c54`; installed CLI2026.1023.0.
+
+The normal service environment successfully initialized embedded PostgreSQL. The execution-sandbox initdb/launchctl failures remain documented above, but they no longer block the running service.
+
+Plain `db:backup --json` succeeded using the supported CLI. Verified gzip integrity and a nonempty69,336-byte dump at `~/.paperclip/instances/factory/data/backups/paperclip-20261031-163305.sql.gz`; SHA256 `5f7c7c332b6e96441dfe9be37757026a6230047eb480d2400940809439d596e9`. Backup directory/file tightened to0700/0600. Health now reports databaseBackup.status=ok and no backup warnings. Retention is30days. No dump contents or credentials were exposed. This is a logical backup test, not a full stopped-copy or restore rehearsal.
+
+First-owner setup remains pending. Source inspection of the shipped UI confirms the ordinary local URL guides an authenticated/private unclaimed instance through Sign in / Create account and Claim this instance; no startup token needs to be pasted into chat. The user has been asked to perform that browser step. No administrative account, company, goal, task, agent, or approval has been created by the agent.
+
+Local regression suite:8tests passed after telemetry changes; targeted bootstrap tests2/2 passed again after tightening the supported Node version gate. Normal Terminal service start is verified; restart after logout/login, visual UI acceptance, full backup and restore remain unverified.
