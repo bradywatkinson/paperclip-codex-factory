@@ -1,0 +1,4 @@
+FACTORY_CLOUD_SPIKE_OK
+- Checked-out branch: work
+- HEAD commit: dffa2116f78ac4fce5386f33af965e65ac365cad
+- First README heading: Story Keeper — Next.js + TypeScript + ConvexREADME.md

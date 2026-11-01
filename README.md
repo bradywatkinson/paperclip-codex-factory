@@ -55,7 +55,7 @@ The tests need loopback port `8100` available and use disposable configuration f
 
 ## Codex Cloud contract spike
 
-Issue [#2](https://github.com/bradywatkinson/paperclip-codex-factory/issues/2) records the installed experimental CLI contract, sanitized fixtures, unsupported operations, and upgrade policy. See [the compatibility matrix and verification procedure](docs/codex-cloud/README.md). The authorized read-only probe reached READY with zero reported file changes. See [the live evidence](docs/codex-cloud/evidence/2026-11-01.md) for exit-code traps, result limitations, and remaining unverified behavior.
+Issue [#2](https://github.com/bradywatkinson/paperclip-codex-factory/issues/2) records the installed experimental CLI contract, sanitized fixtures, unsupported operations, and upgrade policy. See [the compatibility matrix and verification procedure](docs/codex-cloud/README.md). The authorized read-only probe reached READY with zero reported file changes, and the user supplied its final response from the [Cloud UI](https://chatgpt.com/remote/task_e_6ae76e6a06948325b7310562482caa13). See [the live evidence](docs/codex-cloud/evidence/2026-11-01.md) for the user-reported result, exit-code traps, requested-versus-reported branch difference, and remaining unverified behavior.
 
 ## Upstream references
 
