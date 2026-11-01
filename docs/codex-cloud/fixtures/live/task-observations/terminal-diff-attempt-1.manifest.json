@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "codex",
+    "cloud",
+    "diff",
+    "task_e_6ae76e6a06948325b7310562482caa13",
+    "--attempt",
+    "1"
+  ],
+  "cli_version": "0.166.0",
+  "captured_at_utc": "2026-11-01T16:54:54.575666+00:00",
+  "exit_code": 1,
+  "timeout_seconds": 25,
+  "timed_out": false,
+  "redactions": [],
+  "note": "Read-only observation of the single authorized probe; process exit is recorded independently of remote task state."
+}

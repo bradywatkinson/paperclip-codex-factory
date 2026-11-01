@@ -1,0 +1,2 @@
+WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)
+Error: No diff available for task task_e_6ae76e6a06948325b7310562482caa13; it may still be running.
