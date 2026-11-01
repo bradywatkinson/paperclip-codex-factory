@@ -1,0 +1,22 @@
+{
+  "command": [
+    "codex",
+    "cloud",
+    "exec",
+    "--env",
+    "6a7aa92536508191bf085b59e7d6b8ba",
+    "--branch",
+    "main",
+    "--attempts",
+    "1",
+    "Factory Cloud CLI compatibility probe (issue-2-readonly-1).\nThis is read-only. Do not change files, commit, push, open pull requests, deploy, install packages, execute project scripts, or read credentials/secrets. No network access is needed for the requested inspection.\nInspect only Git metadata and the repository's README files. Return FACTORY_CLOUD_SPIKE_OK, the checked-out branch (or detached), the HEAD commit, and the first README heading (or README absent). Do not perform any implementation work.\n"
+  ],
+  "started_at": "2026-11-01T16:52:55.364400+00:00",
+  "finished_at": "2026-11-01T16:52:59.353330+00:00",
+  "exit_code": 0,
+  "local_deadline_seconds": 60,
+  "local_deadline_exceeded": false,
+  "credential_redactions": 0,
+  "authorization": "User confirmed Story Keeper read-only probe on 2026-11-01",
+  "automatic_retry": false
+}
