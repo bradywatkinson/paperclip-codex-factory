@@ -1,0 +1,7 @@
+WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)
+error: the following required arguments were not provided:
+  --env <ENV_ID>
+
+Usage: codex cloud exec --env <ENV_ID> <QUERY>
+
+For more information, try '--help'.

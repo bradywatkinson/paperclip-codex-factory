@@ -1,0 +1,3 @@
+Factory Cloud CLI compatibility probe (issue-2-readonly-1).
+This is read-only. Do not change files, commit, push, open pull requests, deploy, install packages, execute project scripts, or read credentials/secrets. No network access is needed for the requested inspection.
+Inspect only Git metadata and the repository's README files. Return FACTORY_CLOUD_SPIKE_OK, the checked-out branch (or detached), the HEAD commit, and the first README heading (or README absent). Do not perform any implementation work.

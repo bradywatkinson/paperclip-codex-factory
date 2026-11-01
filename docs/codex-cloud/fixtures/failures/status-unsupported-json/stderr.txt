@@ -1,0 +1,8 @@
+WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)
+error: unexpected argument '--json' found
+
+  tip: to pass '--json' as a value, use '-- --json'
+
+Usage: codex cloud status <TASK_ID>
+
+For more information, try '--help'.
