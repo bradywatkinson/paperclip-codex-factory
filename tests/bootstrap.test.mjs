@@ -68,7 +68,7 @@ fs.writeFileSync(process.env.FIXTURE_RECORD, JSON.stringify(args));
 const prefix = args[args.indexOf('--prefix') + 1];
 const entry = path.join(prefix, 'lib/node_modules/paperclipai/dist/index.js');
 fs.mkdirSync(path.dirname(entry), { recursive: true });
-fs.writeFileSync(entry, "console.log(JSON.stringify({args:process.argv.slice(2),path:process.env.PATH}))");
+fs.writeFileSync(entry, "const {spawnSync}=require('node:child_process'); const codex=spawnSync('codex',['--version'],{encoding:'utf8'}); console.log(JSON.stringify({args:process.argv.slice(2),path:process.env.PATH,codexStatus:codex.status,codexOutput:codex.stdout?.trim()}))");
 `);
   const env = {
     ...cleanEnv(home), PAPERCLIP_NODE: node, PAPERCLIP_INSTALL_METHOD: 'global',
@@ -81,11 +81,16 @@ fs.writeFileSync(entry, "console.log(JSON.stringify({args:process.argv.slice(2),
   assert.equal(args[args.indexOf('--prefix') + 1], path.join(home, '.local/share/paperclip-global'));
   assert.ok(args.includes('paperclipai@2026.1023.0'));
   const launcher = path.join(home, '.local/share/paperclip-factory/bin/paperclipai');
+  const cliBin = path.join(home, '.local/bin');
+  await fs.mkdir(cliBin, { recursive: true });
+  await fs.writeFile(path.join(cliBin, 'codex'), '#!/bin/sh\nprintf "%s\\n" fixture-codex\n', { mode: 0o700 });
   assert.equal((await fs.stat(launcher)).mode & 0o777, 0o700);
-  const launched = await exec(launcher, ['argument with spaces', '$(touch INJECTED)', "quote'argument"], { cwd: dir, env });
+  const launched = await exec(launcher, ['argument with spaces', '$(touch INJECTED)', "quote'argument"], { cwd: dir, env: { ...env, PATH: '/usr/bin:/bin:/usr/sbin:/sbin' } });
   const result = JSON.parse(launched.stdout);
   assert.deepEqual(result.args, ['argument with spaces', '$(touch INJECTED)', "quote'argument"]);
-  assert.equal(result.path.split(path.delimiter)[0], bin);
+  assert.deepEqual(result.path.split(path.delimiter).slice(0, 4), [bin, cliBin, '/opt/homebrew/bin', '/usr/local/bin']);
+  assert.equal(result.codexStatus, 0);
+  assert.equal(result.codexOutput, 'fixture-codex');
   assert.ok(!(await fs.readdir(dir)).includes('INJECTED'));
   assert.deepEqual(await fs.readdir(path.dirname(launcher)), ['paperclipai']);
 });

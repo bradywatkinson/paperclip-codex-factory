@@ -7,7 +7,7 @@ node="${PAPERCLIP_NODE:-$(command -v node)}"
 "$node" -e 'const [a,b]=process.versions.node.split(".").map(Number); if(a<24 || (a===24 && b<15) || a===25) { console.error("Paperclip requires Node 24.15+ (24.x) or >=26; see README.md"); process.exit(1); }'
 export PAPERCLIP_HOME="${PAPERCLIP_HOME:-$HOME/.paperclip}"
 export PAPERCLIP_INSTANCE_ID="${PAPERCLIP_INSTANCE_ID:-factory}"
-export PATH="$(dirname "$node"):$HOME/.local/bin:$PATH"
+export PATH="$(dirname "$node"):$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:${PATH:-/usr/bin:/bin:/usr/sbin:/sbin}"
 export PAPERCLIP_TELEMETRY_DISABLED="${PAPERCLIP_TELEMETRY_DISABLED:-1}"
 export npm_config_cache="${npm_config_cache:-$HOME/.cache/npm}"
 # Mise's npm shim can pin a different Node; invoke npm's JS using the validated Node.
@@ -39,7 +39,7 @@ case "${PAPERCLIP_INSTALL_METHOD:-managed}" in
     trap 'rm -f "$temporary"' EXIT
     {
       printf '#!/bin/bash\nset -euo pipefail\nexport PAPERCLIP_TELEMETRY_DISABLED=1\n'
-      printf 'export PATH=%q:"$PATH"\n' "$(dirname "$node")"
+      printf 'export PATH=%q:"$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:${PATH:-/usr/bin:/bin:/usr/sbin:/sbin}"\n' "$(dirname "$node")"
       printf 'exec %q %q "$@"\n' "$node" "$prefix/lib/node_modules/paperclipai/dist/index.js"
     } > "$temporary"
     chmod 700 "$temporary"
