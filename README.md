@@ -53,6 +53,10 @@ node --test tests/*.test.mjs
 
 The tests need loopback port `8100` available and use disposable configuration files and an inert CLI fixture.
 
+## Codex Cloud contract spike
+
+Issue [#2](https://github.com/bradywatkinson/paperclip-codex-factory/issues/2) records the installed experimental CLI contract, sanitized fixtures, unsupported operations, and upgrade policy. See [the compatibility matrix and verification procedure](docs/codex-cloud/README.md). Live dispatch remains pending environment authorization.
+
 ## Upstream references
 
 - [Managed installation](https://docs.paperclip.ing/reference/cli/installation/)
