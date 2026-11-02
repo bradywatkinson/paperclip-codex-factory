@@ -212,7 +212,9 @@ test('dispatch checks scope, sends exact one-argument prompt, and blocks rather 
   assert.equal(patches[0].body.status, 'blocked');
   assert.deepEqual(patches[0].body.unblockDescriptor.owner, { agentId: AGENT });
   assert.equal(typeof patches[0].body.unblockDescriptor.action, 'string');
-  assert.match(patches[0].body.comment, /Dispatch is not task completion/);
+  assert.ok(patches[0].body.comment.startsWith(`Cloud submission confirmed: [Open Cloud task](${UI}).`));
+  assert.match(patches[0].body.comment, /Waiting for Cloud-result review or reconciliation/);
+  assert.match(patches[0].body.comment, /No additional Cloud job will be submitted automatically/);
   assert.ok(!patches.some(call => call.body.status === 'done'));
   const guard = path.join(stateDir, ISSUE + '.json');
   assert.equal((await fs.stat(guard)).mode & 0o777, 0o600);
@@ -325,6 +327,9 @@ test('ambiguous dispatch failures retain a sticky guard and never retry', async 
     const guard = JSON.parse(await fs.readFile(path.join(stateDir, ISSUE + '.json'), 'utf8'));
     assert.equal(guard.status, 'unknown');
     assert.ok(!JSON.stringify(guard).includes(SECRET));
+    const handoff = f.apiCalls.find(call => call.method === 'PATCH');
+    assert.ok(handoff.body.comment.startsWith('Cloud submission could not be confirmed.'));
+    assert.ok(!handoff.body.comment.includes('Cloud submission confirmed:'));
     await assert.rejects(dispatchFromPaperclip({ config, context, stateDir, ...f }), unknown);
     assert.equal(cloudCommands(f).length, 1);
   }
