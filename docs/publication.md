@@ -20,3 +20,7 @@ Review evidence:
 - [Dispatch operating instructions](cloud-dispatch.md)
 
 Earlier dated records that say artifacts were local or unpublished describe their state at verification time. Draft PR #17 now publishes those artifacts. Remaining manual checks and unsupported operations recorded under #1, #2, and #16 remain explicit; publication does not establish completion of those checks.
+
+## Merge and journal review — 2026-11-02
+
+PR #17 was merged at `fb8f6103ae5f474dd7b64a6d223a2e9a517a6ae0`; the initial publication record above is historical. The execution-journal implementation is now proposed separately in [draft PR #18](https://github.com/bradywatkinson/paperclip-codex-factory/pull/18), based on that merged main. Its [verification record](evidence/issue-4-execution-journal/README.md) covers 63 passing tests and additive live migration through schema 3, with the old guard preserved and no new Cloud work. PR #18 remains unmerged for review.

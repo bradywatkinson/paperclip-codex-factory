@@ -77,3 +77,5 @@ The current live journal is schema 3. The earlier schema-2 fixture is historical
 - [Bridge regression tests](../../../tests/cloud-dispatch.test.mjs)
 
 The existing ChatGPT and Paperclip credentials were used only through their normal clients; no credential values, prompts, raw subprocess errors, or unrelated account data are stored in the journal or these fixtures.
+
+Publication: implementation and evidence are available in [draft PR #18](https://github.com/bradywatkinson/paperclip-codex-factory/pull/18). Issue #4 remains open pending review/merge.
