@@ -242,12 +242,19 @@ test('legacy accepted guard imports once without altering source bytes or dispat
   const source = legacy(); const file = await legacyFile(directory, source);
   const bytes = await fs.readFile(file);
   let journal = open(directory);
+  const beforeImport = Date.now();
   const imported = journal.importLegacyGuard(ISSUE);
+  assert.ok(Date.parse(imported.updatedAt) >= beforeImport);
+  assert.ok(Date.parse(imported.updatedAt) <= Date.now());
+  assert.equal(imported.createdAt, source.createdAt);
+  assert.equal(journal.events(ISSUE)[0].at, imported.updatedAt);
+  assert.equal(journal.db.prepare('SELECT imported_at FROM legacy_imports WHERE execution_id=?').get(imported.executionId).imported_at, imported.updatedAt);
   assert.equal(imported.state, 'running'); assert.equal(imported.attempt, 1);
   assert.equal(imported.cloudTaskId, CLOUD);
   assert.equal(journal.claim(ISSUE, RUN2).claimed, false);
   const executionId = imported.executionId;
   assert.equal(journal.importLegacyGuard(ISSUE).executionId, executionId);
+  assert.equal(journal.get(ISSUE).updatedAt, imported.updatedAt);
   journal.close();
   journal = open(directory);
   try { assert.equal(journal.importLegacyGuard(ISSUE).executionId, executionId); assert.equal(journal.list().length, 1); }
@@ -583,4 +590,74 @@ test('new directory ancestry is synced before journal creation, including a trai
   const fence = path.join(directory, ISSUE + '.json');
   assert.ok(events.some((event, index) => index < boundary && event.type === 'sync' && event.path === fence));
   // This verifies the requested filesystem ordering, not a physical power-loss experiment.
+});
+
+test('version-two legacy timestamp repair preserves identity, receipts and later state history', async t => {
+  const directory = await temporary(t);
+  const createdAt = '2026-11-02T10:00:00.000Z';
+  const importedAt = '2026-11-02T12:00:00.000Z';
+  const laterAt = '2026-11-02T14:00:00.000Z';
+  const runningId = WORKSPACE;
+  const unknownIssue = '88888888-8888-4888-8888-888888888888';
+  const unknownId = '99999999-9999-4999-8999-999999999999';
+  const laterIssue = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const laterId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const untouchedIssue = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const untouchedId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  let db = new DatabaseSync(path.join(directory, JOURNAL_FILENAME));
+  db.exec(JOURNAL_MIGRATIONS[0]);
+  insertV1(db, { created_at: createdAt, updated_at: createdAt });
+  for (const [id, issue] of [[unknownId, unknownIssue], [laterId, laterIssue], [untouchedId, untouchedIssue]]) {
+    insertV1(db, {
+      id, issue_id: issue, state: 'unknown', created_at: createdAt, updated_at: createdAt,
+      cloud_task_id: null, emitted_url: null, task_url: null, dispatched_at: null,
+      error_code: 'LEGACY_UNKNOWN',
+    });
+  }
+  db.exec(JOURNAL_MIGRATIONS[1]);
+  for (const [id, issue] of [[runningId, ISSUE], [unknownId, unknownIssue], [laterId, laterIssue]]) {
+    db.prepare('INSERT INTO legacy_imports VALUES(?,?,?,?)').run(path.join(directory, issue + '.json'), 'a'.repeat(64), id, importedAt);
+  }
+  db.prepare("UPDATE executions SET state='failed',revision=1,updated_at=?,error_code='OPERATOR_VERIFIED_FAILED' WHERE id=?").run(laterAt, laterId);
+  db.prepare('INSERT INTO execution_events(execution_id,from_state,to_state,revision,run_id,error_code,at) VALUES(?,?,?,?,?,?,?)').run(laterId, 'unknown', 'failed', 1, RUN2, 'OPERATOR_VERIFIED_FAILED', laterAt);
+  const rowBefore = db.prepare('SELECT * FROM executions WHERE id=?').get(runningId);
+  const initialEventCount = db.prepare('SELECT count(*) n FROM execution_events').get().n;
+  db.exec('PRAGMA application_id=' + JOURNAL_APPLICATION_ID + '; PRAGMA user_version=2;');
+  db.close();
+  const journal = open(directory);
+  try {
+    assert.equal(journal.db.prepare('PRAGMA user_version').get().user_version, JOURNAL_SCHEMA_VERSION);
+    for (const issue of [ISSUE, unknownIssue]) {
+      const record = journal.get(issue);
+      assert.equal(record.createdAt, createdAt);
+      assert.equal(record.updatedAt, importedAt);
+      assert.equal(record.revision, 0);
+      assert.equal(journal.events(issue)[0].at, importedAt);
+    }
+    const after = journal.get(ISSUE);
+    assert.equal(after.executionId, runningId);
+    assert.equal(after.cloudTaskId, CLOUD);
+    assert.equal(after.emittedUrl, rowBefore.emitted_url);
+    assert.equal(after.taskUrl, rowBefore.task_url);
+    assert.equal(after.dispatchedAt, rowBefore.dispatched_at);
+    assert.equal(after.paperclipRunId, RUN);
+    assert.equal(after.attempt, 1);
+    const later = journal.get(laterIssue);
+    assert.equal(later.state, 'failed');
+    assert.equal(later.revision, 1);
+    assert.equal(later.updatedAt, laterAt);
+    const laterEvents = journal.events(laterIssue);
+    assert.equal(laterEvents.length, 2);
+    assert.equal(laterEvents[0].at, importedAt);
+    assert.equal(laterEvents[1].at, laterAt);
+    assert.equal(journal.get(untouchedIssue).updatedAt, createdAt);
+    assert.equal(journal.events(untouchedIssue)[0].at, createdAt);
+    assert.equal(journal.db.prepare('SELECT count(*) n FROM execution_events').get().n, initialEventCount);
+  } finally { journal.close(); }
+  const reopened = open(directory);
+  try {
+    assert.equal(reopened.get(ISSUE).updatedAt, importedAt);
+    assert.equal(reopened.get(laterIssue).updatedAt, laterAt);
+    assert.equal(reopened.db.prepare('SELECT count(*) n FROM execution_events').get().n, initialEventCount);
+  } finally { reopened.close(); }
 });
