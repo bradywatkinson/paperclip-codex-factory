@@ -5,7 +5,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
 
 const exec = promisify(execFile);
@@ -20,22 +20,42 @@ async function fixture(t, content) {
   return { dir, config };
 }
 
-async function run(config) {
+async function run(config, probe) {
+  let port = probe.port;
+  if (!port) {
+    const reservation = net.createServer();
+    await new Promise((resolve, reject) => {
+      reservation.once('error', reject);
+      reservation.listen(0, '127.0.0.1', resolve);
+    });
+    port = reservation.address().port;
+    await new Promise(resolve => reservation.close(resolve));
+  }
   try {
-    return { code: 0, ...await exec(process.execPath, [configure, config]) };
+    return { code: 0, ...await exec(process.execPath, ['--import', pathToFileURL(probe.preload).href, configure, config], {
+      env: { ...process.env, FACTORY_TEST_PROBE_PORT: String(port) },
+    }) };
   } catch (error) {
     return { code: error.code, stdout: error.stdout, stderr: error.stderr };
   }
 }
 
 test('configuration protects persistent state and refuses a live server', async t => {
-  // These tests share the fixed control-plane port and must run in sequence.
-  const probe = net.createServer();
-  await new Promise((resolve, reject) => {
-    probe.once('error', reject);
-    probe.listen(8100, '127.0.0.1', resolve);
-  });
-  await new Promise(resolve => probe.close(resolve));
+  // Redirect only the child's TCP probe, leaving the production 8100 default and
+  // generated configuration intact. Tests can coexist with the real service.
+  const probeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'paperclip-config-probe-'));
+  t.after(() => fs.rm(probeDir, { recursive: true, force: true }));
+  const probe = { preload: path.join(probeDir, 'redirect-connect.mjs') };
+  await fs.writeFile(probe.preload, `
+import assert from 'node:assert/strict';
+import net from 'node:net';
+const connect = net.connect.bind(net);
+net.connect = (options, ...args) => {
+  assert.equal(options.host, '127.0.0.1');
+  assert.equal(options.port, 8100);
+  return connect({ ...options, port: Number(process.env.FACTORY_TEST_PROBE_PORT) }, ...args);
+};
+`);
 
   await t.test('idempotent, private, preserves signup policy and secrets', async t => {
     const secret = 'SENTINEL_CREDENTIAL_MUST_NOT_APPEAR';
@@ -47,7 +67,7 @@ test('configuration protects persistent state and refuses a live server', async 
     }));
     let previous;
     for (let i = 0; i < 2; i++) {
-      const result = await run(config);
+      const result = await run(config, probe);
       assert.equal(result.code, 0, result.stderr);
       assert.ok(!`${result.stdout}${result.stderr}`.includes(secret));
       const actual = JSON.parse(await fs.readFile(config, 'utf8'));
@@ -68,7 +88,7 @@ test('configuration protects persistent state and refuses a live server', async 
 
   await t.test('fresh config allows initial registration', async t => {
     const { config } = await fixture(t, JSON.stringify({ server: {} }));
-    const result = await run(config);
+    const result = await run(config, probe);
     assert.equal(result.code, 0, result.stderr);
     const actual = JSON.parse(await fs.readFile(config, 'utf8'));
     assert.equal(actual.auth.disableSignUp, false);
@@ -78,7 +98,7 @@ test('configuration protects persistent state and refuses a live server', async 
   await t.test('malformed config is unchanged and errors redact contents', async t => {
     const secret = 'SENTINEL_INVALID_JSON_SECRET';
     const { dir, config } = await fixture(t, secret);
-    const result = await run(config);
+    const result = await run(config, probe);
     assert.notEqual(result.code, 0);
     assert.match(result.stderr, /Cannot read a valid Paperclip config object/);
     assert.ok(!`${result.stdout}${result.stderr}`.includes(secret));
@@ -92,10 +112,10 @@ test('configuration protects persistent state and refuses a live server', async 
     const server = net.createServer(socket => socket.end());
     await new Promise((resolve, reject) => {
       server.once('error', reject);
-      server.listen(8100, '127.0.0.1', resolve);
+      server.listen(0, '127.0.0.1', resolve);
     });
     t.after(() => new Promise(resolve => server.close(resolve)));
-    const result = await run(config);
+    const result = await run(config, { ...probe, port: server.address().port });
     assert.notEqual(result.code, 0);
     assert.match(result.stderr, /Port 8100 is in use/);
     assert.equal(await fs.readFile(config, 'utf8'), original);

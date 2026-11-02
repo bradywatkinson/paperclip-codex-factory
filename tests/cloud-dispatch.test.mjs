@@ -4,6 +4,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import {
   buildPrompt, cloudEnvironment, dispatchFromPaperclip, parseDispatchReceipt,
   runCommand, validateProjectConfig,
@@ -15,10 +16,12 @@ const PROJECT = '33333333-3333-4333-8333-333333333333';
 const RUN = '44444444-4444-4444-8444-444444444444';
 const ISSUE = '55555555-5555-4555-8555-555555555555';
 const OTHER = '66666666-6666-4666-8666-666666666666';
+const WORKSPACE = '77777777-7777-4777-8777-777777777777';
 const TASK_ID = 'task_e_0123456789abcdef0123456789abcdef';
 const EMITTED = `https://chatgpt.com/codex/tasks/${TASK_ID}`;
 const UI = `https://chatgpt.com/remote/${TASK_ID}`;
 const SECRET = 'PAPERCLIP_FIXTURE_SECRET_MUST_NOT_LEAK';
+const entrypoint = fileURLToPath(new URL('../scripts/cloud-dispatch.mjs', import.meta.url));
 const config = {
   schemaVersion: 1, companyId: COMPANY, projectId: PROJECT,
   repository: 'fixture/project', environmentId: 'a'.repeat(32), branch: 'main',
@@ -53,8 +56,8 @@ function fixture({ issue = task, agent = {}, heartbeat = {}, project = {}, respo
     let value;
     if (pathname === '/api/agents/me') value = { id: AGENT, companyId: COMPANY, ...agent };
     else if (pathname === `/api/heartbeat-runs/${RUN}`) value = { id: RUN, companyId: COMPANY, agentId: AGENT, status: 'running', contextSnapshot: { issueId: ISSUE }, ...heartbeat };
-    else if (pathname === `/api/projects/${PROJECT}`) value = { id: PROJECT, companyId: COMPANY, workspaces: [{ repoUrl: 'https://github.com/fixture/project.git', repoRef: 'main', isPrimary: true }], ...project };
-    else if (pathname === `/api/issues/${ISSUE}/checkout`) value = { ...issue, status: 'in_progress', executionRunId: RUN };
+    else if (pathname === `/api/projects/${PROJECT}`) value = { id: PROJECT, companyId: COMPANY, workspaces: [{ id: WORKSPACE, companyId: COMPANY, projectId: PROJECT, repoUrl: 'https://github.com/fixture/project.git', repoRef: 'main', isPrimary: true }], ...project };
+    else if (pathname === `/api/issues/${ISSUE}/checkout`) value = { ...issue, status: 'in_progress', executionRunId: RUN, checkoutRunId: RUN };
     else if (pathname === `/api/issues/${ISSUE}`) value = { ...issue, ...(body ?? {}) };
     else throw new Error(`Unexpected fixture request ${method} ${pathname}`);
     return new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } });
@@ -75,8 +78,9 @@ const unknown = error => error.outcome === 'unknown';
 
 test('project config rejects injection and unsupported values before dispatch', () => {
   for (const patch of [
-    { schemaVersion: 2 }, { companyId: '../company' }, { projectId: 'x?token=secret' },
+    { schemaVersion: 2 }, { companyId: '../company' }, { projectId: 'x?token=secret' }, { workspaceId: '../workspace' },
     { repository: 'owner/repo;touch INJECTED' }, { repository: 'https://github.com/a/b' },
+    { repository: ['fixture/project'] }, { environmentId: ['a'.repeat(32)] },
     { environmentId: '--enable feature' }, { branch: 'main --env another' },
     { branch: '../main' }, { branch: 'main.lock' }, { branch: '-main' },
     { mode: 'unrestricted' }, { codexCommand: 'codex' },
@@ -150,6 +154,19 @@ test('runCommand bounds runtime/output and reports failed startup', async t => {
   assert.equal(missing.failedToStart, true);
 });
 
+test('runCommand deadline terminates the CLI wrapper and its grandchild', { skip: process.platform === 'win32' }, async t => {
+  const dir = await temporary(t);
+  const started = path.join(dir, 'grandchild-started');
+  const leaked = path.join(dir, 'grandchild-survived');
+  const grandchild = `const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(started)},'started');setTimeout(()=>fs.writeFileSync(${JSON.stringify(leaked)},'survived'),1200);setTimeout(()=>{},10000)`;
+  const wrapper = `require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(grandchild)}],{stdio:'ignore'});setTimeout(()=>{},10000)`;
+  const result = await runCommand(process.execPath, ['-e', wrapper], { env: cloudEnvironment(), timeoutMs: 500 });
+  assert.equal(result.timedOut, true);
+  assert.equal(await fs.readFile(started, 'utf8'), 'started');
+  await new Promise(resolve => setTimeout(resolve, 900));
+  await assert.rejects(fs.access(leaked), { code: 'ENOENT' });
+});
+
 test('dispatch checks scope, sends exact one-argument prompt, and blocks rather than completes Paperclip', async t => {
   const stateDir = await temporary(t);
   const description = 'Acceptance: preserve literal $(touch INJECTED), `touch INJECTED`, quotes and\n--env attacker';
@@ -194,22 +211,47 @@ test('scope/config/auth failures never reach Cloud dispatch', async t => {
     { context: { ...context, companyId: OTHER } },
     { fixture: { agent: { id: OTHER } } },
     { fixture: { heartbeat: { agentId: OTHER } } },
+    { fixture: { heartbeat: { status: 'succeeded' } } },
     { fixture: { heartbeat: { contextSnapshot: { issueId: '../another' } } } },
     { fixture: { issue: { ...task, projectId: OTHER } } },
     { fixture: { issue: { ...task, assigneeAgentId: OTHER } } },
     { fixture: { issue: { ...task, status: 'done' } } },
     { fixture: { issue: { ...task, status: 'blocked' } } },
     { fixture: { project: { companyId: OTHER } } },
+    { fixture: { project: { workspaces: [] } } },
+    { fixture: { project: { workspaces: [{ repoUrl: 'https://github.com/unrelated/repo.git', repoRef: 'main' }] } } },
+    { fixture: { project: { workspaces: [{ repoUrl: 'https://user:password@github.com/fixture/project.git' }] } } },
+    { fixture: { project: { workspaces: [{ repoUrl: 'https://github.com/fixture/project?secret=token' }] } } },
+    { fixture: { project: { workspaces: [{ repoUrl: 'https://github.com.attacker.invalid/fixture/project' }] } } },
+    { fixture: { project: { workspaces: [{ repoUrl: 'https://github.com/fixture/project', repoRef: 'other-branch' }] } } },
+    { fixture: { project: { workspaces: [{ companyId: OTHER, repoUrl: 'https://github.com/fixture/project' }] } } },
+    { fixture: { project: { workspaces: [{ projectId: OTHER, repoUrl: 'https://github.com/fixture/project' }] } } },
+    { fixture: { project: { workspaces: [{ repoUrl: 'https://github.com/fixture/project', repoRef: {} }] } } },
     { fixture: { version: '0.167.0' } },
     { fixture: { auth: 'an API key' } },
     { fixture: { responses: { [`POST /api/issues/${ISSUE}/checkout`]: new Response('{}', { status: 409 }) } } },
     { fixture: { responses: { [`POST /api/issues/${ISSUE}/checkout`]: new Response(JSON.stringify({ ...task, executionRunId: OTHER })) } } },
+    { fixture: { responses: { [`POST /api/issues/${ISSUE}/checkout`]: new Response(JSON.stringify({ ...task, status: 'done', executionRunId: RUN, checkoutRunId: RUN })) } } },
   ];
   for (const [index, c] of cases.entries()) {
     const f = fixture(c.fixture);
     await assert.rejects(dispatchFromPaperclip({ config, context: c.context ?? context, stateDir: path.join(await temporary(t), String(index)), ...f }), rejected);
     assert.equal(cloudCommands(f).length, 0, `case ${index} reached Cloud`);
   }
+});
+
+test('explicit workspace selects the validated binding and accepts GitHub SSH URLs', async t => {
+  const stateDir = await temporary(t);
+  const f = fixture({ project: { workspaces: [
+    { id: OTHER, repoUrl: 'https://github.com/another/repo', isPrimary: true },
+    { id: WORKSPACE, companyId: COMPANY, projectId: PROJECT, repoUrl: 'git@github.com:fixture/project.git', repoRef: 'refs/heads/main' },
+  ] } });
+  const receipt = await dispatchFromPaperclip({ config: { ...config, workspaceId: WORKSPACE }, context, stateDir, ...f });
+  assert.equal(receipt.status, 'dispatched');
+  assert.equal(cloudCommands(f).length, 1);
+  const missing = fixture();
+  await assert.rejects(dispatchFromPaperclip({ config: { ...config, workspaceId: OTHER }, context, stateDir: await temporary(t), ...missing }), rejected);
+  assert.equal(cloudCommands(missing).length, 0);
 });
 
 test('ambiguous dispatch failures retain a sticky guard and never retry', async t => {
@@ -263,7 +305,28 @@ test('successful guard is reused and concurrent callers submit at most once', as
   assert.ok(results.some(result => result.status === 'fulfilled'));
 });
 
-test('real fixture HTTP API and inert executable exercise the complete bridge boundary', async t => {
+test('mapping changes and corrupted guard records cannot trigger a second submission', async t => {
+  const stateDir = await temporary(t);
+  const initial = fixture();
+  await dispatchFromPaperclip({ config, context, stateDir, ...initial });
+  for (const patch of [{ mode: 'code_change' }, { environmentId: 'b'.repeat(32) }, { workspaceId: WORKSPACE }]) {
+    const subsequent = fixture();
+    await assert.rejects(dispatchFromPaperclip({ config: { ...config, ...patch }, context, stateDir, ...subsequent }), unknown);
+    assert.equal(cloudCommands(subsequent).length, 0);
+  }
+  const guard = path.join(stateDir, ISSUE + '.json');
+  const persisted = JSON.parse(await fs.readFile(guard, 'utf8'));
+  await fs.writeFile(guard, JSON.stringify({ ...persisted, emittedUrl: 'https://attacker.invalid/receipt' }));
+  const tampered = fixture();
+  await assert.rejects(dispatchFromPaperclip({ config, context, stateDir, ...tampered }));
+  assert.equal(cloudCommands(tampered).length, 0);
+  await fs.writeFile(guard, SECRET);
+  const malformed = fixture();
+  await assert.rejects(dispatchFromPaperclip({ config, context, stateDir, ...malformed }), error => !String(error).includes(SECRET));
+  assert.equal(cloudCommands(malformed).length, 0);
+});
+
+test('process entrypoint, real fixture HTTP API and inert executable exercise the complete bridge', async t => {
   const dir = await temporary(t);
   const command = path.join(dir, "codex fixture's executable");
   const recordFile = path.join(dir, 'argv.jsonl');
@@ -280,11 +343,19 @@ test('real fixture HTTP API and inert executable exercise the complete bridge bo
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
-  const receipt = await dispatchFromPaperclip({
-    config: { ...config, codexCommand: command },
-    context: { ...context, apiUrl: `http://127.0.0.1:${server.address().port}` },
-    stateDir: path.join(dir, 'state'), env: { ...process.env, PAPERCLIP_API_KEY: SECRET },
+  const configFile = path.join(dir, 'project config.json');
+  await fs.writeFile(configFile, JSON.stringify({ ...config, codexCommand: command }));
+  const result = await runCommand(process.execPath, [entrypoint, '--config', configFile], {
+    env: {
+      ...process.env, PAPERCLIP_API_URL: `http://127.0.0.1:${server.address().port}`,
+      PAPERCLIP_API_KEY: SECRET, PAPERCLIP_COMPANY_ID: COMPANY,
+      PAPERCLIP_AGENT_ID: AGENT, PAPERCLIP_RUN_ID: RUN,
+      PAPERCLIP_HOME: path.join(dir, 'paperclip-home'), PAPERCLIP_INSTANCE_ID: 'fixture',
+    }, timeoutMs: 5000,
   });
+  assert.equal(result.code, 0, result.stderr);
+  assert.ok(!`${result.stdout}${result.stderr}`.includes(SECRET));
+  const receipt = JSON.parse(result.stdout);
   assert.equal(receipt.status, 'dispatched');
   assert.equal(receipt.cloudTaskId, TASK_ID);
   const commands = (await fs.readFile(recordFile, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
@@ -293,4 +364,23 @@ test('real fixture HTTP API and inert executable exercise the complete bridge bo
   assert.ok(commands.every(c => c.hasPaperclipKey === false));
   assert.ok(mock.apiCalls.some(call => call.method === 'POST' && call.pathname.endsWith('/checkout')));
   assert.ok(mock.apiCalls.some(call => call.method === 'PATCH' && call.body.status === 'blocked'));
+});
+
+test('Paperclip redirect cannot forward the run bearer to another endpoint', async t => {
+  let receivedRedirect = 0;
+  const server = http.createServer((req, res) => {
+    if (req.url === '/api/agents/me') {
+      res.writeHead(302, { location: '/credential-sink' });
+      res.end();
+    } else { receivedRedirect++; res.writeHead(200); res.end('{}'); }
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
+  const f = fixture();
+  await assert.rejects(dispatchFromPaperclip({
+    config, context: { ...context, apiUrl: `http://127.0.0.1:${server.address().port}` },
+    stateDir: await temporary(t), run: f.run,
+  }), rejected);
+  assert.equal(receivedRedirect, 0);
+  assert.equal(cloudCommands(f).length, 0);
 });

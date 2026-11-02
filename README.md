@@ -51,11 +51,15 @@ node --check scripts/configure-local.mjs
 node --test tests/*.test.mjs
 ```
 
-The tests need loopback port `8100` available and use disposable configuration files and an inert CLI fixture.
+The tests use isolated ephemeral TCP fixtures, disposable configuration files, and inert CLI executables; they can run alongside the live service on port `8100`.
 
 ## Codex Cloud contract spike
 
 Issue [#2](https://github.com/bradywatkinson/paperclip-codex-factory/issues/2) records the installed experimental CLI contract, sanitized fixtures, unsupported operations, and upgrade policy. See [the compatibility matrix and verification procedure](docs/codex-cloud/README.md). The authorized read-only probe reached READY with zero reported file changes, and the user supplied its final response from the [Cloud UI](https://chatgpt.com/remote/task_e_6ae76e6a06948325b7310562482caa13). See [the live evidence](docs/codex-cloud/evidence/2026-11-01.md) for the user-reported result, exit-code traps, requested-versus-reported branch difference, and remaining unverified behavior.
+
+## Paperclip Cloud dispatch bridge
+
+Issue [#3](https://github.com/bradywatkinson/paperclip-codex-factory/issues/3) adds an external one-shot bridge using Paperclip's `process` adapter. It validates the assigned task and project, dispatches through the pinned ChatGPT-authenticated Cloud CLI, and leaves an explicit blocked reconciliation handoff. See [configuration, lifecycle and verification](docs/cloud-dispatch.md). The bridge's receipt is dispatch evidence; Cloud task completion is reconciled separately.
 
 ## Upstream references
 
