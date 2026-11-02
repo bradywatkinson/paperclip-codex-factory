@@ -60,3 +60,7 @@ The minimal guard is not the complete execution journal planned in #4. The bridg
 CLI authentication used the supported browser-approved flow. An initial credential-store permission failure was corrected, and the exact unused key from that failed attempt was revoked. No auth challenge URLs, bearer credentials, credential-store contents, or unrelated account data are included in these artifacts.
 
 Implementation and operating instructions: [dispatch guide](../../cloud-dispatch.md). The changes and evidence are committed locally; publication/review is separate.
+
+## Publication update — 2026-11-02
+
+This implementation and its artifacts are now published in [draft PR #17](https://github.com/bradywatkinson/paperclip-codex-factory/pull/17). The earlier local-publication note records the state at live verification time. The original 23 feature commit SHAs are unchanged, and published code head `63d0e2707f90a2a07002d3850388de2a368b520f` has the same verified file tree as `cafc9879e3378acc68ba780923e44e8126b0c72b`. The recorded 28-test result and live evidence are retained; publication introduced no code changes. `main` contains only the empty base, so the feature work is still awaiting review and merge. See [the publication record](../../publication.md).

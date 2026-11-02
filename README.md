@@ -4,6 +4,8 @@ A reusable, local Paperclip coordination service for an Apple Silicon Mac. The c
 
 Initial scope: persistent storage, authenticated local UI, backups, and a macOS login service. Application integration, production deployments, and automatic merges are outside this foundation.
 
+Published for review in [draft PR #17](https://github.com/bradywatkinson/paperclip-codex-factory/pull/17), covering the bootstrap, CLI contract spike, and dispatch bridge. `main` contains only the empty initial review base; the feature work remains on `issue-3-cloud-dispatch`. See [the publication record](docs/publication.md).
+
 ## Versions and prerequisites
 
 - Paperclip: `2026.1023.0`, installed through the supported managed installer or an optional global npm installation.
