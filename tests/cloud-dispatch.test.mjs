@@ -223,6 +223,40 @@ test('dispatch checks scope, sends exact one-argument prompt, and blocks rather 
   assert.ok(!persisted.includes(description));
 });
 
+test('IPv6 loopback API origins dispatch while non-loopback origins reject before authenticated requests', async t => {
+  for (const apiUrl of ['http://[::1]:8100/', 'http://[0:0:0:0:0:0:0:1]:8100/']) {
+    const f = fixture();
+    const origins = [];
+    const request = async (url, options) => {
+      origins.push(new URL(url).origin);
+      assert.equal(new Headers(options.headers).get('authorization'), `Bearer ${SECRET}`);
+      return f.request(url, options);
+    };
+    const receipt = await dispatchFromPaperclip({ config, context: { ...context, apiUrl }, stateDir: await temporary(t), ...f, request });
+    assert.equal(receipt.status, 'dispatched');
+    assert.equal(cloudCommands(f).length, 1);
+    assert.ok(origins.length > 0);
+    assert.ok(origins.every(origin => origin === 'http://[::1]:8100'));
+  }
+  for (const apiUrl of [
+    'http://[::2]:8100/',
+    'http://[2001:db8::1]:8100/',
+    'http://[::ffff:127.0.0.1]:8100/',
+    'http://user:password@[::1]:8100/',
+    'http://[::1]:8100/api',
+    'http://[::1]:8100/?redirect=attacker',
+    'http://[::1]:8100/#fragment',
+  ]) {
+    const f = fixture();
+    await assert.rejects(
+      dispatchFromPaperclip({ config, context: { ...context, apiUrl }, stateDir: await temporary(t), ...f }),
+      error => error.code === 'INVALID_API_ORIGIN' && error.outcome === 'rejected',
+    );
+    assert.equal(f.apiCalls.length, 0);
+    assert.equal(f.commands.length, 0);
+  }
+});
+
 test('scope/config/auth failures never reach Cloud dispatch', async t => {
   const cases = [
     { context: { ...context, apiUrl: 'https://attacker.invalid' } },
