@@ -1,0 +1,6 @@
+{
+  "observedAt": "2026-11-02T16:55:55.714888+00:00",
+  "agentId": "8dbe3519-3064-4038-a913-682b95b02ce3",
+  "status": "paused",
+  "reason": "Disposable smoke verification complete; paused to prevent unintended future dispatches. Existing agent configuration and evidence retained."
+}

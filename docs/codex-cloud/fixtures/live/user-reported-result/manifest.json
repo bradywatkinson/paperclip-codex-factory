@@ -1,0 +1,19 @@
+{
+  "source_type": "user_reported_cloud_ui",
+  "reported_on": "2026-11-01",
+  "task_id": "task_e_6ae76e6a06948325b7310562482caa13",
+  "user_verified_ui_url": "https://chatgpt.com/remote/task_e_6ae76e6a06948325b7310562482caa13",
+  "cli_emitted_url": "https://chatgpt.com/codex/tasks/task_e_6ae76e6a06948325b7310562482caa13",
+  "response_file": "response.txt",
+  "provenance": "Final response supplied verbatim by the user in chat; not CLI output and not a browser scrape.",
+  "requested_branch": "main",
+  "reported_checked_out_branch": "work",
+  "reported_head_commit": "dffa2116f78ac4fce5386f33af965e65ac365cad",
+  "branch_or_commit_relation_verified": false,
+  "readme_heading_caveat": "The trailing README.md is preserved verbatim. It may be copied citation text; a normalized README heading was not independently verified.",
+  "ui_changed_files_verified": false,
+  "ui_pr_controls_or_state_verified": false,
+  "redactions": [],
+  "base_branch_ancestry_verified": false,
+  "requested_branch_ignored_established": false
+}

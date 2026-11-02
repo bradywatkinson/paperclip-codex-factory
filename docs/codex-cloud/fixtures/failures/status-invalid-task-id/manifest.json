@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "codex",
+    "cloud",
+    "status",
+    "task_spike_invalid_format"
+  ],
+  "cli_version": "0.166.0",
+  "captured_at_utc": "2026-11-01T03:59:50.622858+00:00",
+  "timeout_seconds": 20,
+  "timed_out": false,
+  "exit_code": 1,
+  "note": "Read-only status lookup using a deliberately nonexistent synthetic ID; not a remotely failed task."
+}

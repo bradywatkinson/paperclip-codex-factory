@@ -1,0 +1,20 @@
+#!/bin/bash
+# Always use an external instance, independent of the caller's working directory.
+set -euo pipefail
+export PAPERCLIP_HOME="${PAPERCLIP_HOME:-$HOME/.paperclip}"
+export PAPERCLIP_INSTANCE_ID="${PAPERCLIP_INSTANCE_ID:-factory}"
+export PAPERCLIP_TELEMETRY_DISABLED="${PAPERCLIP_TELEMETRY_DISABLED:-1}"
+export PORT="${PORT:-8100}"
+default_cli="$HOME/.local/bin/paperclipai"
+if [[ -x "$HOME/.local/share/paperclip-factory/bin/paperclipai" ]]; then
+  default_cli="$HOME/.local/share/paperclip-factory/bin/paperclipai"
+fi
+cli="${PAPERCLIP_CLI:-$default_cli}"
+export PAPERCLIP_SHIM_PATH="${PAPERCLIP_SHIM_PATH:-$cli}"
+if [[ ! -x "$cli" ]]; then
+  echo "Paperclip is not installed. See README.md." >&2
+  exit 1
+fi
+# Prevent a repository's .env from becoming control-plane configuration.
+cd "$PAPERCLIP_HOME"
+exec "$cli" "$@"

@@ -1,0 +1,41 @@
+{
+  "interval_seconds": 15,
+  "note": "Read-only task-status samples. Exact stdout/stderr retained for initial and terminal samples only. No remote cancellation or additional dispatch.",
+  "samples": [
+    {
+      "sample": 0,
+      "elapsed_seconds": 0,
+      "captured_at_utc": "2026-11-01T16:53:51.519851+00:00",
+      "status": "PENDING",
+      "exit_code": 1
+    },
+    {
+      "sample": 1,
+      "elapsed_seconds": 16,
+      "captured_at_utc": "2026-11-01T16:54:07.319172+00:00",
+      "status": "PENDING",
+      "exit_code": 1
+    },
+    {
+      "sample": 2,
+      "elapsed_seconds": 32,
+      "captured_at_utc": "2026-11-01T16:54:22.748790+00:00",
+      "status": "PENDING",
+      "exit_code": 1
+    },
+    {
+      "sample": 3,
+      "elapsed_seconds": 47,
+      "captured_at_utc": "2026-11-01T16:54:38.168930+00:00",
+      "status": "PENDING",
+      "exit_code": 1
+    },
+    {
+      "sample": 4,
+      "elapsed_seconds": 63,
+      "captured_at_utc": "2026-11-01T16:54:53.764688+00:00",
+      "status": "READY",
+      "exit_code": 0
+    }
+  ]
+}

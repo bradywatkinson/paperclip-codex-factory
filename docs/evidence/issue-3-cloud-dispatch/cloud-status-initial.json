@@ -1,0 +1,16 @@
+{
+  "argv": [
+    "codex",
+    "cloud",
+    "status",
+    "task_e_6ae8be3af9888325b7e16a152a0843a8"
+  ],
+  "cli_version": "codex-cli 0.166.0",
+  "captured_at_utc": "2026-11-02T16:48:02.051033+00:00",
+  "exit_code": 0,
+  "task_id": "task_e_6ae8be3af9888325b7e16a152a0843a8",
+  "status": "READY",
+  "stdout": "[READY] Inspect Cloud dispatch and report findings\nbradywatkinson/story-keeper  \u2022  2m ago\nno diff\n",
+  "stderr": "WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)\n",
+  "provenance": "Exact status output for the single authorized task; read-only. Process exit is separate from remote task state."
+}

@@ -1,0 +1,2 @@
+WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)
+Error: http error: get_task_details failed: GET https://chatgpt.com/backend-api/wham/tasks/task_spike_invalid_format failed: 404 Not Found; content-type=application/json; body={"detail":"Invalid task ID"}

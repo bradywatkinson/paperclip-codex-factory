@@ -1,0 +1,97 @@
+{
+  "captured_at": "2026-11-01T03:57:54.478497+00:00",
+  "commands": [
+    {
+      "name": "version",
+      "argv": [
+        "codex",
+        "--version"
+      ],
+      "exit_code": 0,
+      "stdout": "version.stdout.txt",
+      "stderr": "version.stderr.txt"
+    },
+    {
+      "name": "cloud-help",
+      "argv": [
+        "codex",
+        "cloud",
+        "--help"
+      ],
+      "exit_code": 0,
+      "stdout": "cloud-help.stdout.txt",
+      "stderr": "cloud-help.stderr.txt"
+    },
+    {
+      "name": "login-status",
+      "argv": [
+        "codex",
+        "login",
+        "status"
+      ],
+      "exit_code": 0,
+      "stdout": "login-status.stdout.txt",
+      "stderr": "login-status.stderr.txt"
+    },
+    {
+      "name": "cloud-exec-help",
+      "argv": [
+        "codex",
+        "cloud",
+        "exec",
+        "--help"
+      ],
+      "exit_code": 0,
+      "stdout": "cloud-exec-help.stdout.txt",
+      "stderr": "cloud-exec-help.stderr.txt"
+    },
+    {
+      "name": "cloud-status-help",
+      "argv": [
+        "codex",
+        "cloud",
+        "status",
+        "--help"
+      ],
+      "exit_code": 0,
+      "stdout": "cloud-status-help.stdout.txt",
+      "stderr": "cloud-status-help.stderr.txt"
+    },
+    {
+      "name": "cloud-list-help",
+      "argv": [
+        "codex",
+        "cloud",
+        "list",
+        "--help"
+      ],
+      "exit_code": 0,
+      "stdout": "cloud-list-help.stdout.txt",
+      "stderr": "cloud-list-help.stderr.txt"
+    },
+    {
+      "name": "cloud-apply-help",
+      "argv": [
+        "codex",
+        "cloud",
+        "apply",
+        "--help"
+      ],
+      "exit_code": 0,
+      "stdout": "cloud-apply-help.stdout.txt",
+      "stderr": "cloud-apply-help.stderr.txt"
+    },
+    {
+      "name": "cloud-diff-help",
+      "argv": [
+        "codex",
+        "cloud",
+        "diff",
+        "--help"
+      ],
+      "exit_code": 0,
+      "stdout": "cloud-diff-help.stdout.txt",
+      "stderr": "cloud-diff-help.stderr.txt"
+    }
+  ]
+}

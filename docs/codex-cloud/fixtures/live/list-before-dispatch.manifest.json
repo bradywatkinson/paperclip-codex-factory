@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "codex",
+    "cloud",
+    "list",
+    "--json",
+    "--limit",
+    "20"
+  ],
+  "cli_version": "0.166.0",
+  "captured_at_utc": "2026-11-01T04:01:05.415562+00:00",
+  "timeout_seconds": 20,
+  "timed_out": false,
+  "exit_code": 0,
+  "redactions": [],
+  "note": "Read-only task inventory before authorized spike dispatch; does not test task creation or remote mutation."
+}

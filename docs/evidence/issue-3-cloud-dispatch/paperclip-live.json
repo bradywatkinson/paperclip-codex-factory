@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-11-02T16:49:37.470443+00:00",
+  "provenance": {
+    "paperclipReads": [
+      "issue get",
+      "agent get",
+      "issue runs",
+      "issue comments",
+      "run get",
+      "run log (documented API; stdout-only extraction)"
+    ],
+    "guardRead": "Known credential-free per-issue dispatch guard",
+    "rawRunStdoutRetrieved": true,
+    "stdoutSanitization": "Captured only known credential-free bridge receipt fields from stdout; no environment, raw logs, credentials, or unrelated event content retained."
+  },
+  "projectId": "a7fb8b31-92a3-4739-98bb-3293bf3a0cf4",
+  "agent": {
+    "id": "8dbe3519-3064-4038-a913-682b95b02ce3",
+    "status": "idle",
+    "lifecycleState": "ready"
+  },
+  "issue": {
+    "id": "688630d3-a281-45ab-8707-37e5f3731663",
+    "identifier": "PAP-2",
+    "status": "blocked",
+    "assigneeAgentId": "8dbe3519-3064-4038-a913-682b95b02ce3",
+    "checkoutRunId": null,
+    "executionRunId": null,
+    "unblockDescriptor": {
+      "owner": {
+        "agentId": "8dbe3519-3064-4038-a913-682b95b02ce3"
+      },
+      "action": "Reconcile the Cloud result, then resume this Paperclip task."
+    }
+  },
+  "guard": {
+    "schemaVersion": 1,
+    "status": "dispatched",
+    "paperclipIssueId": "688630d3-a281-45ab-8707-37e5f3731663",
+    "paperclipRunId": "3984a3d7-b366-4dec-bd54-146a185f1b26",
+    "projectId": "a7fb8b31-92a3-4739-98bb-3293bf3a0cf4",
+    "repository": "bradywatkinson/story-keeper",
+    "environmentId": "6a7aa92536508191bf085b59e7d6b8ba",
+    "branch": "main",
+    "cloudTaskId": "task_e_6ae8be3af9888325b7e16a152a0843a8",
+    "taskUrl": "https://chatgpt.com/remote/task_e_6ae8be3af9888325b7e16a152a0843a8",
+    "createdAt": "2026-11-02T16:45:43.789Z",
+    "dispatchedAt": "2026-11-02T16:45:48.609Z",
+    "workspaceId": "0809b177-68a3-416a-9453-bbd69087e14a"
+  },
+  "runs": [
+    {
+      "runId": "d7390bf3-07c1-45aa-b4fa-64c9f2ab52e4",
+      "status": "succeeded",
+      "runtimeMode": "legacy",
+      "invocationSource": "on_demand",
+      "errorCode": null,
+      "startedAt": "2026-11-02T16:48:37.659Z",
+      "finishedAt": "2026-11-02T16:48:40.328Z",
+      "durationMs": 2669,
+      "completion": {
+        "stopReason": "completed",
+        "timeoutFired": false,
+        "effectiveTimeoutSec": 180
+      },
+      "exitCode": 0,
+      "signal": null,
+      "bridgeStdoutReceipt": {
+        "schemaVersion": 1,
+        "status": "already_dispatched",
+        "paperclipIssueId": "688630d3-a281-45ab-8707-37e5f3731663",
+        "paperclipRunId": "3984a3d7-b366-4dec-bd54-146a185f1b26",
+        "cloudTaskId": "task_e_6ae8be3af9888325b7e16a152a0843a8",
+        "taskUrl": "https://chatgpt.com/remote/task_e_6ae8be3af9888325b7e16a152a0843a8",
+        "environmentId": "6a7aa92536508191bf085b59e7d6b8ba",
+        "branch": "main"
+      }
+    },
+    {
+      "runId": "3984a3d7-b366-4dec-bd54-146a185f1b26",
+      "status": "succeeded",
+      "runtimeMode": "legacy",
+      "invocationSource": "assignment",
+      "errorCode": null,
+      "startedAt": "2026-11-02T16:45:30.358Z",
+      "finishedAt": "2026-11-02T16:45:49.046Z",
+      "durationMs": 18688,
+      "completion": {
+        "stopReason": "completed",
+        "timeoutFired": false,
+        "effectiveTimeoutSec": 180
+      },
+      "exitCode": 0,
+      "signal": null,
+      "bridgeStdoutReceipt": {
+        "schemaVersion": 1,
+        "status": "dispatched",
+        "paperclipIssueId": "688630d3-a281-45ab-8707-37e5f3731663",
+        "paperclipRunId": "3984a3d7-b366-4dec-bd54-146a185f1b26",
+        "cloudTaskId": "task_e_6ae8be3af9888325b7e16a152a0843a8",
+        "taskUrl": "https://chatgpt.com/remote/task_e_6ae8be3af9888325b7e16a152a0843a8",
+        "environmentId": "6a7aa92536508191bf085b59e7d6b8ba",
+        "branch": "main"
+      }
+    }
+  ],
+  "receiptComments": [
+    {
+      "commentId": "a41c954f-641d-449d-bced-b3c2c39aff7a",
+      "authorAgentId": "8dbe3519-3064-4038-a913-682b95b02ce3",
+      "createdAt": "2026-11-02T16:45:48.733Z",
+      "cloudTaskIdPresent": true,
+      "taskUrlPresent": true,
+      "dispatchNotCompletion": true,
+      "automaticRedispatchDisabled": true,
+      "existingGuardReconciliation": false
+    }
+  ],
+  "observedLocalRunCount": 2,
+  "observedUniqueCloudIdsInGuardAndReceipts": [
+    "task_e_6ae8be3af9888325b7e16a152a0843a8"
+  ],
+  "cloudJobCountIndependentlyMeasured": false,
+  "observedBridgeOutcomes": [
+    "already_dispatched",
+    "dispatched"
+  ],
+  "redispatchVerification": {
+    "firstOutcome": "dispatched",
+    "secondOutcome": "already_dispatched",
+    "sameCloudTaskId": true,
+    "sameOriginalDispatchRunId": true,
+    "secondWakeSource": "explicit operator on_demand verification; not automatic notification",
+    "receiptCommentCountRemained": 1
+  }
+}
