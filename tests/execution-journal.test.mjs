@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -195,6 +196,31 @@ test('two actual processes racing for one queued attempt produce exactly one cla
   const reopened = open(directory);
   try { assert.equal(reopened.get(ISSUE).state, 'dispatching'); assert.equal(reopened.list().length, 1); }
   finally { reopened.close(); }
+});
+
+test('fresh-database startup and claims are safe across concurrent constructor processes', async t => {
+  const source = `import fs from 'node:fs/promises';import {ExecutionJournal} from ${JSON.stringify(moduleUrl)};const[d,c,i,r,raw]=process.argv.slice(1);await fs.writeFile(d+'/ready-'+r,'ready');while(true){try{await fs.access(d+'/go');break}catch{}await new Promise(resolve=>setTimeout(resolve,10))}const j=new ExecutionJournal({directory:d,companyId:c});j.queue({...JSON.parse(raw),paperclipRunId:r});const claim=j.claim(i,r);j.close();console.log(JSON.stringify(claim));`;
+  for (let round = 0; round < 5; round++) {
+    const directory = await temporary(t);
+    const runIds = Array.from({ length: 6 }, () => randomUUID());
+    const children = runIds.map(runId => child(source, [directory, COMPANY, ISSUE, runId, JSON.stringify(identity)], directory));
+    t.after(() => { for (const worker of children) worker.process.kill('SIGKILL'); });
+    await Promise.all(runIds.map(runId => waitFor(path.join(directory, 'ready-' + runId))));
+    await assert.rejects(fs.access(path.join(directory, JOURNAL_FILENAME)), { code: 'ENOENT' });
+    await fs.writeFile(path.join(directory, 'go'), 'go');
+    const results = await Promise.all(children.map(worker => worker.closed));
+    assert.ok(results.every(result => result.code === 0), 'Fresh startup round ' + round + ': ' + results.map(result => result.stderr).join('\n'));
+    const claims = results.map(result => JSON.parse(result.stdout));
+    assert.equal(claims.filter(claim => claim.claimed).length, 1, 'Fresh startup round ' + round);
+    assert.equal(new Set(claims.map(claim => claim.record.executionId)).size, 1);
+    const journal = open(directory);
+    try {
+      assert.equal(journal.list().length, 1);
+      assert.equal(journal.get(ISSUE).state, 'dispatching');
+      assert.deepEqual(new Set(journal.runs(ISSUE).map(run => run.paperclipRunId)), new Set(runIds));
+      assert.equal(journal.db.prepare('PRAGMA user_version').get().user_version, JOURNAL_SCHEMA_VERSION);
+    } finally { journal.close(); }
+  }
 });
 
 test('a killed process after durable claim cannot cause a second submission', async t => {
@@ -533,4 +559,28 @@ test('legacy files cannot overwrite an execution that has already been claimed o
     assert.equal(preserved.paperclipRunId, existing.paperclipRunId);
     assert.equal(preserved.revision, existing.revision);
   }
+});
+
+test('new directory ancestry is synced before journal creation, including a trailing-slash state path', async t => {
+  const base = await temporary(t);
+  const directory = path.join(base, 'new', 'nested', 'journal');
+  const source = `import fs from 'node:fs';import path from 'node:path';import {ExecutionJournal} from ${JSON.stringify(moduleUrl)};const[d,c,raw]=process.argv.slice(1);const events=[],fds=new Map();const originalOpen=fs.openSync,originalSync=fs.fsyncSync,originalClose=fs.closeSync;fs.openSync=(name,...args)=>{const fd=originalOpen(name,...args);if(typeof name==='string'){const file=path.resolve(name);fds.set(fd,file);events.push({type:'open',path:file,flags:args[0]});}return fd;};fs.fsyncSync=fd=>{events.push({type:'sync',path:fds.get(fd)});return originalSync(fd);};fs.closeSync=fd=>{fds.delete(fd);return originalClose(fd);};const j=new ExecutionJournal({directory:d,companyId:c});j.queue(JSON.parse(raw));j.claim(JSON.parse(raw).paperclipIssueId,JSON.parse(raw).paperclipRunId);events.push({type:'submission-boundary'});j.close();console.log(JSON.stringify(events));`;
+  const worker = child(source, [directory + path.sep, COMPANY, JSON.stringify(identity)], base);
+  t.after(() => worker.process.kill('SIGKILL'));
+  let timeout;
+  const result = await Promise.race([
+    worker.closed,
+    new Promise((_, reject) => { timeout = setTimeout(() => { worker.process.kill('SIGKILL'); reject(new Error('Directory durability probe did not finish')); }, 10_000); }),
+  ]).finally(() => clearTimeout(timeout));
+  assert.equal(result.code, 0, result.stderr);
+  const events = JSON.parse(result.stdout);
+  const databaseOpen = events.findIndex(event => event.type === 'open' && event.path === path.join(directory, JOURNAL_FILENAME));
+  assert.ok(databaseOpen >= 0);
+  for (const expected of [base, path.join(base, 'new'), path.join(base, 'new', 'nested'), directory]) {
+    assert.ok(events.some((event, index) => index < databaseOpen && event.type === 'sync' && event.path === expected), 'Unsynced directory before database creation: ' + expected);
+  }
+  const boundary = events.findIndex(event => event.type === 'submission-boundary');
+  const fence = path.join(directory, ISSUE + '.json');
+  assert.ok(events.some((event, index) => index < boundary && event.type === 'sync' && event.path === fence));
+  // This verifies the requested filesystem ordering, not a physical power-loss experiment.
 });

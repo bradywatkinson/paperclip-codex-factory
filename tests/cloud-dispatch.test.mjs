@@ -6,6 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
+import { ExecutionJournal, JOURNAL_FILENAME } from '../lib/execution-journal.mjs';
 import {
   buildPrompt, cloudEnvironment, dispatchFromPaperclip, parseDispatchReceipt,
   runCommand, validateProjectConfig,
@@ -76,6 +78,17 @@ function fixture({ issue = task, agent = {}, heartbeat = {}, project = {}, respo
 const cloudCommands = f => f.commands.filter(call => call.args[0] === 'cloud');
 const rejected = error => error.outcome === 'rejected';
 const unknown = error => error.outcome === 'unknown';
+function persisted(directory, attempt = 1) {
+  const journal = new ExecutionJournal({ directory, companyId: COMPANY });
+  try { return journal.get(ISSUE, attempt); } finally { journal.close(); }
+}
+function identity(overrides = {}) {
+  return { ...config, paperclipIssueId: ISSUE, paperclipRunId: RUN, ...overrides };
+}
+function legacy(overrides = {}) {
+  return { ...identity(), schemaVersion: 1, status: 'dispatched', createdAt: '2026-11-02T00:00:00.000Z',
+    dispatchedAt: '2026-11-02T00:00:01.000Z', cloudTaskId: TASK_ID, emittedUrl: EMITTED, taskUrl: UI, ...overrides };
+}
 
 async function startApi(t, mock) {
   const server = http.createServer(async (req, res) => {
@@ -101,6 +114,7 @@ test('project config rejects injection and unsupported values before dispatch', 
     { branch: '../main' }, { branch: 'main.lock' }, { branch: '-main' },
     { mode: 'unrestricted' }, { codexCommand: 'codex' },
     { dispatchTimeoutMs: 999 }, { dispatchTimeoutMs: 60_001 },
+    { attempt: 0 }, { attempt: 101 }, { attempt: '2' }, { attempt: null },
   ]) assert.throws(() => validateProjectConfig({ ...config, ...patch }), rejected);
   const validated = validateProjectConfig(config);
   assert.equal(validated.dispatchTimeoutMs, 60_000);
@@ -218,9 +232,11 @@ test('dispatch checks scope, sends exact one-argument prompt, and blocks rather 
   assert.ok(!patches.some(call => call.body.status === 'done'));
   const guard = path.join(stateDir, ISSUE + '.json');
   assert.equal((await fs.stat(guard)).mode & 0o777, 0o600);
-  const persisted = await fs.readFile(guard, 'utf8');
-  assert.ok(!persisted.includes(SECRET));
-  assert.ok(!persisted.includes(description));
+  const record = persisted(stateDir);
+  assert.equal(record.state, 'running');
+  assert.equal(record.attempt, 1);
+  assert.ok(!JSON.stringify(record).includes(SECRET));
+  assert.ok(!JSON.stringify(record).includes(description));
 });
 
 test('IPv6 loopback API origins dispatch while non-loopback origins reject before authenticated requests', async t => {
@@ -358,8 +374,8 @@ test('ambiguous dispatch failures retain a sticky guard and never retry', async 
     assert.equal(caught?.outcome, 'unknown');
     assert.ok(!String(caught).includes(SECRET));
     assert.equal(cloudCommands(f).length, 1);
-    const guard = JSON.parse(await fs.readFile(path.join(stateDir, ISSUE + '.json'), 'utf8'));
-    assert.equal(guard.status, 'unknown');
+    const guard = persisted(stateDir);
+    assert.equal(guard.state, 'unknown');
     assert.ok(!JSON.stringify(guard).includes(SECRET));
     const handoff = f.apiCalls.find(call => call.method === 'PATCH');
     assert.ok(handoff.body.comment.startsWith('Cloud submission could not be confirmed.'));
@@ -374,7 +390,8 @@ test('receipt survives a failed Paperclip handoff and blocks redispatch', async 
   const f = fixture({ responses: { [`PATCH /api/issues/${ISSUE}`]: () => { throw new Error(SECRET); } } });
   await assert.rejects(dispatchFromPaperclip({ config, context, stateDir, ...f }), error => error.outcome === 'unknown' && error.cloudTaskId === TASK_ID && !String(error).includes(SECRET));
   assert.equal(cloudCommands(f).length, 1);
-  const guard = JSON.parse(await fs.readFile(path.join(stateDir, ISSUE + '.json'), 'utf8'));
+  const guard = persisted(stateDir);
+  assert.equal(guard.state, 'unknown');
   assert.equal(guard.cloudTaskId, TASK_ID);
   assert.equal(guard.taskUrl, UI);
   const recovered = fixture();
@@ -425,8 +442,11 @@ test('mapping changes and corrupted guard records cannot trigger a second submis
     assert.equal(cloudCommands(subsequent).length, 0);
   }
   const guard = path.join(stateDir, ISSUE + '.json');
-  const persisted = JSON.parse(await fs.readFile(guard, 'utf8'));
-  await fs.writeFile(guard, JSON.stringify({ ...persisted, emittedUrl: 'https://attacker.invalid/receipt' }));
+  // SQLite is authoritative after migration; tampering with its receipt must
+  // never cause a replacement Cloud submission.
+  const database = new DatabaseSync(path.join(stateDir, JOURNAL_FILENAME));
+  database.prepare('UPDATE executions SET emitted_url=? WHERE issue_id=?').run('https://attacker.invalid/receipt', ISSUE);
+  database.close();
   const tampered = fixture();
   await assert.rejects(dispatchFromPaperclip({ config, context, stateDir, ...tampered }));
   assert.equal(cloudCommands(tampered).length, 0);
@@ -513,8 +533,8 @@ test('supervisor cancellation kills the Cloud process tree and preserves an unkn
   assert.equal(reported.outcome, 'unknown');
   assert.ok(!stderr.includes(SECRET));
   const guardFile = path.join(paperclipHome, 'instances/fixture/data/cloud-dispatch', COMPANY, ISSUE + '.json');
-  const guard = JSON.parse(await fs.readFile(guardFile, 'utf8'));
-  assert.equal(guard.status, 'unknown');
+  const guard = persisted(path.dirname(guardFile));
+  assert.equal(guard.state, 'unknown');
   await new Promise(resolve => setTimeout(resolve, 1600));
   await assert.rejects(fs.access(leaked), { code: 'ENOENT' });
   const retry = fixture();
@@ -539,4 +559,118 @@ test('Paperclip redirect cannot forward the run bearer to another endpoint', asy
   }), rejected);
   assert.equal(receivedRedirect, 0);
   assert.equal(cloudCommands(f).length, 0);
+});
+
+test('legacy accepted receipts import without changing the source or submitting a replacement', async t => {
+  const stateDir = await temporary(t);
+  const file = path.join(stateDir, ISSUE + '.json');
+  const original = JSON.stringify(legacy({ privateExtra: SECRET })) + '\n';
+  await fs.writeFile(file, original, { mode: 0o600 });
+  const f = fixture({ issue: { ...task, status: 'blocked' }, runId: OTHER });
+  const receipt = await dispatchFromPaperclip({ config, context: { ...context, runId: OTHER }, stateDir, ...f });
+  assert.equal(receipt.status, 'already_dispatched');
+  assert.equal(receipt.schemaVersion, 1);
+  assert.equal(receipt.executionState, 'running');
+  assert.equal(receipt.attempt, 1);
+  assert.equal(receipt.paperclipRunId, RUN);
+  assert.equal(receipt.cloudTaskId, TASK_ID);
+  assert.equal(f.commands.length, 0);
+  assert.equal(f.apiCalls.filter(call => call.method === 'PATCH').length, 0);
+  assert.equal(await fs.readFile(file, 'utf8'), original);
+  assert.ok(!JSON.stringify(receipt).includes(SECRET));
+  const journal = new ExecutionJournal({ directory: stateDir, companyId: COMPANY });
+  try {
+    assert.deepEqual(new Set(journal.runs(ISSUE).map(row => row.paperclipRunId)), new Set([RUN, OTHER]));
+    assert.ok(!JSON.stringify(journal.get(ISSUE)).includes(SECRET));
+  } finally { journal.close(); }
+});
+
+test('legacy interrupted, unknown, malformed and unsupported guards fail closed before any CLI invocation', async t => {
+  for (const status of ['dispatching', 'unknown']) {
+    const stateDir = await temporary(t);
+    const file = path.join(stateDir, ISSUE + '.json');
+    const data = legacy({ status, ...(status === 'dispatching' ? { cloudTaskId: undefined, emittedUrl: undefined, taskUrl: undefined } : {}), errorCode: SECRET });
+    const original = JSON.stringify(data) + '\n';
+    await fs.writeFile(file, original);
+    const f = fixture();
+    await assert.rejects(dispatchFromPaperclip({ config, context, stateDir, ...f }), unknown);
+    assert.equal(f.commands.length, 0);
+    const record = persisted(stateDir);
+    assert.equal(record.state, 'unknown');
+    assert.ok(!JSON.stringify(record).includes(SECRET));
+    if (status === 'unknown') assert.equal(record.cloudTaskId, TASK_ID);
+    assert.equal(await fs.readFile(file, 'utf8'), original);
+  }
+  for (const source of [SECRET, JSON.stringify(legacy({ schemaVersion: 999 })), JSON.stringify(legacy({ companyId: OTHER }))]) {
+    const stateDir = await temporary(t);
+    await fs.writeFile(path.join(stateDir, ISSUE + '.json'), source);
+    const f = fixture();
+    await assert.rejects(dispatchFromPaperclip({ config, context, stateDir, ...f }), error => !String(error).includes(SECRET));
+    assert.equal(f.commands.length, 0);
+  }
+});
+
+test('a committed queued execution resumes under a new Paperclip run and claims once', async t => {
+  const stateDir = await temporary(t);
+  const journal = new ExecutionJournal({ directory: stateDir, companyId: COMPANY });
+  const queued = journal.queue(identity());
+  assert.equal(queued.state, 'queued');
+  journal.close();
+  const f = fixture({ runId: OTHER });
+  const receipt = await dispatchFromPaperclip({ config, context: { ...context, runId: OTHER }, stateDir, ...f });
+  assert.equal(receipt.status, 'dispatched');
+  assert.equal(receipt.executionId, queued.executionId);
+  assert.equal(receipt.paperclipRunId, OTHER);
+  assert.equal(cloudCommands(f).length, 1);
+  assert.equal(persisted(stateDir).state, 'running');
+});
+
+test('another active or unverifiable submitting run is not downgraded or resubmitted', async t => {
+  for (const ownerStatus of ['running', 'unavailable']) {
+    const stateDir = await temporary(t);
+    const journal = new ExecutionJournal({ directory: stateDir, companyId: COMPANY });
+    journal.queue(identity()); journal.claim(ISSUE, RUN); journal.close();
+    const owner = ownerStatus === 'unavailable' ? new Response('{}', { status: 403 }) : new Response(JSON.stringify({ id: RUN, agentId: AGENT, companyId: COMPANY, status: 'running' }));
+    const f = fixture({ runId: OTHER, responses: { [`GET /api/heartbeat-runs/${RUN}`]: owner } });
+    await assert.rejects(dispatchFromPaperclip({ config, context: { ...context, runId: OTHER }, stateDir, ...f }), unknown);
+    assert.equal(f.commands.length, 0);
+    assert.equal(f.apiCalls.filter(call => call.method === 'PATCH').length, 0);
+    assert.equal(persisted(stateDir).state, 'dispatching');
+  }
+});
+
+test('a proven terminal submitting run becomes unknown without a second submission', async t => {
+  const stateDir = await temporary(t);
+  const journal = new ExecutionJournal({ directory: stateDir, companyId: COMPANY });
+  journal.queue(identity()); journal.claim(ISSUE, RUN); journal.close();
+  const owner = new Response(JSON.stringify({ id: RUN, agentId: AGENT, companyId: COMPANY, status: 'failed' }));
+  const f = fixture({ runId: OTHER, responses: { [`GET /api/heartbeat-runs/${RUN}`]: owner } });
+  await assert.rejects(dispatchFromPaperclip({ config, context: { ...context, runId: OTHER }, stateDir, ...f }), unknown);
+  assert.equal(f.commands.length, 0);
+  assert.equal(persisted(stateDir).state, 'unknown');
+  assert.equal(persisted(stateDir).errorCode, 'INTERRUPTED_DISPATCH');
+  assert.equal(f.apiCalls.filter(call => call.method === 'PATCH').length, 1);
+});
+
+test('a later logical attempt is explicit and requires terminal previous executions', async t => {
+  const stateDir = await temporary(t);
+  const first = fixture();
+  await dispatchFromPaperclip({ config, context, stateDir, ...first });
+  const blocked = fixture({ runId: OTHER });
+  await assert.rejects(dispatchFromPaperclip({ config: { ...config, attempt: 2 }, context: { ...context, runId: OTHER }, stateDir, ...blocked }), rejected);
+  assert.equal(cloudCommands(blocked).length, 0);
+  assert.equal(persisted(stateDir, 2), null);
+  const journal = new ExecutionJournal({ directory: stateDir, companyId: COMPANY });
+  const previous = journal.get(ISSUE);
+  journal.transition(ISSUE, { expectedState: 'running', expectedRevision: previous.revision, toState: 'failed', errorCode: 'OPERATOR_VERIFIED_FAILED' });
+  journal.close();
+  const secondId = 'task_e_fedcba9876543210fedcba9876543210';
+  const second = fixture({ runId: OTHER, execResult: { stdout: 'https://chatgpt.com/codex/tasks/' + secondId + '\n' } });
+  const receipt = await dispatchFromPaperclip({ config: { ...config, attempt: 2 }, context: { ...context, runId: OTHER }, stateDir, ...second });
+  assert.equal(receipt.attempt, 2);
+  assert.equal(receipt.cloudTaskId, secondId);
+  assert.equal(receipt.paperclipRunId, OTHER);
+  assert.equal(cloudCommands(second).length, 1);
+  assert.equal(persisted(stateDir).state, 'failed');
+  assert.equal(persisted(stateDir, 2).state, 'running');
 });
