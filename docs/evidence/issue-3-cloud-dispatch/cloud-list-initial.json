@@ -1,0 +1,34 @@
+{
+  "argv": [
+    "codex",
+    "cloud",
+    "list",
+    "--json",
+    "--limit",
+    "20"
+  ],
+  "cli_version": "codex-cli 0.166.0",
+  "captured_at_utc": "2026-11-02T16:48:03.232890+00:00",
+  "exit_code": 0,
+  "task_id": "task_e_6ae8be3af9888325b7e16a152a0843a8",
+  "filtered_tasks": [
+    {
+      "id": "task_e_6ae8be3af9888325b7e16a152a0843a8",
+      "url": "https://chatgpt.com/codex/tasks/task_e_6ae8be3af9888325b7e16a152a0843a8",
+      "title": "Inspect Cloud dispatch and report findings",
+      "status": "ready",
+      "updated_at": "2026-11-02T16:47:39.522465944Z",
+      "environment_id": null,
+      "environment_label": "bradywatkinson/story-keeper",
+      "summary": {
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_removed": 0
+      },
+      "is_review": false,
+      "attempt_total": 1
+    }
+  ],
+  "stderr": "WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)\n",
+  "provenance": "List stdout was parsed and filtered to the exact authorized task identifier. This is not raw list output; unrelated rows and pagination cursor are intentionally not captured."
+}

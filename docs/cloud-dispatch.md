@@ -90,7 +90,7 @@ The bridge performs these steps:
 4. Check out the task for the current run, revalidate its scope and workspace binding, rebuild the prompt from the latest checkout title/description, and create an exclusive issue-scoped dispatch guard.
 5. Execute one `codex cloud exec --env … --branch … --attempts 1` with the entire prompt as one literal argument. No shell is used.
 6. Accept only a single validated ChatGPT task URL as a receipt; retain the emitted URL and a `/remote/<taskId>` navigation URL separately.
-7. Save the receipt, then atomically add a Paperclip comment and set the issue to `blocked` with a dispatcher-owned reconciliation action (`owner: { "agentId": "<current agent ID>" }`). Return the receipt and exit.
+7. Save the receipt, then atomically add a positive confirmation comment with the Cloud link and set the issue to `blocked` with a dispatcher-owned reconciliation action (`owner: { "agentId": "<current agent ID>" }`). The comment says the Cloud submission is confirmed and the task is waiting for result review/reconciliation. Return the receipt and exit.
 
 `read_only` prompts prohibit changes, commits, pushes, PRs, deployment, installation, and project-script execution. `code_change` prompts request a reviewable patch and test evidence, with requested-base-branch delivery information for human review. The tested CLI does not guarantee PR creation. Both modes prohibit merges and deployments; task text is JSON-encoded and cannot replace the bridge's fixed policy.
 
@@ -98,7 +98,7 @@ The child environment is allowlisted. It retains the controller's normal ChatGPT
 
 Successful submission is **not** task completion. Leaving an issue `in_progress` after a successful process exit can trigger Paperclip's corrective heartbeat and dispatch the same work again. The explicit `blocked` disposition means “waiting for the external Cloud result and reconciliation.” It is not a report that the Cloud execution failed.
 
-The bridge names the dispatcher agent as the structured unblock owner. In the installed Paperclip version, an agent-authenticated update cannot name the Board as owner; that request returns 403. Entering this self-owned blocked state queues one `issue_unblock_requested` wake for that agent. That wake is expected: the issue-level guard returns `already_dispatched` for the existing accepted receipt while the task is already blocked, without another PATCH or Cloud submission. It therefore does not create another unblock wake or a dispatch loop. An operator can inspect the Cloud result and arrange a manual reconciliation/resume; structured unblock ownership remains with the dispatcher. Cloud polling, task completion, and automatic reconciliation belong to #5.
+The bridge names the dispatcher agent as the structured unblock owner. In the installed Paperclip version, an agent-authenticated update cannot name the Board as owner; that request returns 403. Depending on runtime state, entering this self-owned blocked state may enqueue an `issue_unblock_requested` wake for that agent. No automatic self-wake was observed in the first live dispatch. A guarded re-invocation returns `already_dispatched` for the existing accepted receipt while the task is already blocked, without another PATCH or Cloud submission, so it does not itself create another unblock wake or dispatch loop. An operator can inspect the Cloud result and arrange a manual reconciliation/resume; structured unblock ownership remains with the dispatcher. Cloud polling, task completion, and automatic reconciliation belong to #5.
 
 The local process waits only for API setup and submission, not Cloud execution. Each API request has a 10-second limit; each CLI preflight has a 10-second limit; the dispatch deadline comes from configuration. The example uses an outer process timeout of 180 seconds and a 10-second grace period to cover preflight, a 60-second submission, and bounded setup/handoff requests (approximately 150 seconds in the slow path). The previous 90-second outer budget could interrupt otherwise valid slow setup. A local deadline does not cancel already accepted Cloud work.
 
@@ -112,13 +112,27 @@ The default guard path is:
 
 `PAPERCLIP_HOME` and `PAPERCLIP_INSTANCE_ID` select the controller instance. The bridge creates private directories and a mode-0600 intent before submission, then records the accepted receipt. The key is the issue, so another heartbeat/run ID cannot bypass it.
 
-A repeated invocation with the same dispatched record returns `already_dispatched` without a second Cloud submission. For an already blocked task this path also makes no PATCH, including the expected `issue_unblock_requested` wake. A changed project/workspace/repository/environment/branch/mode mapping requires reconciliation. Existing blocked issues are not repeatedly commented merely to acknowledge the same receipt.
+A repeated invocation with the same dispatched record returns `already_dispatched` without a second Cloud submission. For an already blocked task this path also makes no PATCH, including a possible `issue_unblock_requested` wake. A changed project/workspace/repository/environment/branch/mode mapping requires reconciliation. Existing blocked issues are not repeatedly commented merely to acknowledge the same receipt.
 
 Once submission has begun, deadlines, signals, output overflow, nonzero submission exits, malformed receipts, and failures recording the accepted handoff become `unknown`. During a running CLI command, outer `SIGTERM`/`SIGINT` handling stops its child process group, including the CLI wrapper and descendants. This local cleanup does not cancel any accepted Cloud job; the dispatch guard remains sticky and there is no automatic retry. An abrupt forced stop can leave the pre-submission intent for investigation. Any known Cloud task ID is retained. If the Paperclip update itself fails, the local intent/receipt still prevents redispatch.
 
 Reconcile the guard and Cloud task inventory manually before any recovery. Do not remove a guard simply to force another submission. This is a minimal issue-level guard, not the complete durable execution journal, migration system, or restart reconciliation planned in #4 and #6.
 
-## Verification
+## Observed live verification — 2026-11-02
+
+The first live Paperclip-to-Cloud dispatch was observed with a separate read-only test task, **PAP-2** (`688630d3-a281-45ab-8707-37e5f3731663`). Paperclip run `3984a3d7-b366-4dec-bd54-146a185f1b26` succeeded in **18.688 seconds**; the recorded Cloud submission took **4.82 seconds**. The task remained `blocked`, with the dispatcher agent as structured unblock owner and one receipt comment.
+
+The receipt points to [the Cloud task](https://chatgpt.com/remote/task_e_6ae8be3af9888325b7e16a152a0843a8). Subsequent CLI observation reported READY, one attempt, and zero file/line changes. The local worker had already exited after dispatch rather than waiting for that remote completion. **28 local tests passed.**
+
+An explicit second local wake, run `d7390bf3-07c1-45aa-b4fa-64c9f2ab52e4`, succeeded with exit 0 in **2.669 seconds**. Its captured stdout returned `already_dispatched`, the same Cloud ID, and the original dispatch run ID. The guard stayed unchanged and there was no new receipt comment/PATCH or Cloud submission. This verifies guard reuse across run IDs; it was an explicit test wake, not an observed automatic self-wake.
+
+A [user-supplied Cloud UI screenshot](evidence/issue-3-cloud-dispatch/cloud-result-user.png) then reported `FACTORY_CLOUD_ADAPTER_OK`, checked-out branch `work`, HEAD `20145a418c4ce2034b301253df8927ec266ace9c`, the Story Keeper README heading, and read-only operation. Its [transcribed provenance](evidence/issue-3-cloud-dispatch/cloud-result-user.json) identifies this as human-supplied visual evidence, not automated final-response retrieval or proof of requested-base ancestry.
+
+After that human review, a Board operator manually completed PAP-2. The [closeout observation](evidence/issue-3-cloud-dispatch/manual-closeout.json) at `2026-11-02T16:54:47Z` records `status: done` and a null unblock descriptor. The earlier blocked snapshot remains intact in the evidence. This completion was a manual decision based on the reported Cloud result; automatic polling/reconciliation under #5 is not implemented.
+
+See [the live evidence record](evidence/issue-3-cloud-dispatch/README.md) and [the sanitized Paperclip observations](evidence/issue-3-cloud-dispatch/paperclip-live.json). These verify dispatch, external-wait handoff, guarded re-invocation, user-reported output, and manual closeout. Base ancestry, PR delivery, remote failure/timeouts, and automated reconciliation remain unverified. No automatic self-wake was observed.
+
+## Verification procedure
 
 Run local checks with the supported Node runtime:
 
@@ -136,7 +150,9 @@ For an authorized live smoke test:
 2. Create a separate `process` dispatcher agent with scheduled heartbeats disabled and no other assigned work.
 3. Assign one disposable `todo` task with explicit read-only acceptance criteria. Assignment may enqueue its run; inspect the run before adding a separate manual wakeup.
 4. Confirm the process uses its injected run ID to recover that task, submits exactly one Cloud job, returns a receipt promptly, and leaves the Paperclip task `blocked` with the Cloud link and dispatcher-owned reconciliation action.
-5. Confirm the guard contains the issue/run mapping, configured environment and branch, Cloud ID, emitted URL, and navigation URL. Observe the expected single `issue_unblock_requested` wake and verify that it returns `already_dispatched` without another PATCH or Cloud job. Verify a repeat invocation cannot submit another job.
+5. Confirm the guard contains the issue/run mapping, configured environment and branch, Cloud ID, emitted URL, and navigation URL. After the first run has finished, observe any conditional `issue_unblock_requested` wake or request one explicit local wake. Verify guard reuse without another PATCH or Cloud submission, distinguishing a captured return value from inference based on run/receipt metadata.
 6. Observe Cloud completion separately. Keep final response content, base ancestry, PR delivery, failure behavior, and any unavailable result fields explicitly unverified until there is corresponding evidence.
 
-Capture sanitized command results and run/task IDs; exclude credentials and the sign-in approval URL. Live verification evidence is recorded separately after the test. This guide does not assert that the live Paperclip-to-Cloud smoke test has passed.
+Capture sanitized command results and run/task IDs; exclude credentials and the sign-in approval URL. Keep each observed live result in the separate evidence record, with its provenance and unresolved checks. The observed smoke test does not establish complete #3 closeout or the later journal/reconciler behavior.
+
+`read_only` is a prompt policy for the Cloud task, not an additional filesystem permission boundary enforced by this bridge. The disposable smoke agent is paused after verification; its completed task and receipts remain available for inspection.

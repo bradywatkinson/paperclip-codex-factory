@@ -1,0 +1,11 @@
+{
+  "observedAt": "2026-11-02T16:54:47.617214+00:00",
+  "paperclipIssueId": "688630d3-a281-45ab-8707-37e5f3731663",
+  "identifier": "PAP-2",
+  "status": "done",
+  "unblockDescriptor": null,
+  "completedAt": "2026-11-02T16:54:46.910Z",
+  "actor": "board_operator",
+  "basis": "user_supplied_cloud_ui_screenshot",
+  "automaticReconciliation": false
+}

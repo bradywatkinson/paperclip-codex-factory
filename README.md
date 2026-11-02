@@ -61,6 +61,10 @@ Issue [#2](https://github.com/bradywatkinson/paperclip-codex-factory/issues/2) r
 
 Issue [#3](https://github.com/bradywatkinson/paperclip-codex-factory/issues/3) adds an external one-shot bridge using Paperclip's `process` adapter. It validates the assigned task and project, dispatches through the pinned ChatGPT-authenticated Cloud CLI, and leaves an explicit blocked reconciliation handoff. See [configuration, lifecycle and verification](docs/cloud-dispatch.md). The bridge's receipt is dispatch evidence; Cloud task completion is reconciled separately.
 
+The live read-only smoke test dispatched Paperclip task PAP-2 in an 18.688-second local run; the Cloud task later reached READY with one attempt and zero reported changes. A second explicit local wake returned `already_dispatched` in 2.669 seconds with the same Cloud ID, unchanged guard, and no new receipt comment or submission. The user supplied the Cloud result screenshot, after which a Board operator manually marked PAP-2 done.
+
+All 28 local tests passed. See [the live evidence](docs/evidence/issue-3-cloud-dispatch/README.md). Automatic reconciliation remains future work under #5.
+
 ## Upstream references
 
 - [Managed installation](https://docs.paperclip.ing/reference/cli/installation/)

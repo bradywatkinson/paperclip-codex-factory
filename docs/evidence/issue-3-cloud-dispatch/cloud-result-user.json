@@ -1,0 +1,13 @@
+{
+  "source": "user_supplied_cloud_ui_screenshot",
+  "verifiedOn": "2026-11-02",
+  "cloudTaskId": "task_e_6ae8be3af9888325b7e16a152a0843a8",
+  "taskUrl": "https://chatgpt.com/remote/task_e_6ae8be3af9888325b7e16a152a0843a8",
+  "marker": "FACTORY_CLOUD_ADAPTER_OK",
+  "reportedBranch": "work",
+  "requestedBranch": "main",
+  "reportedHead": "20145a418c4ce2034b301253df8927ec266ace9c",
+  "readmeHeadingVisualTranscription": "# Story Keeper – Next.js + TypeScript + Convex",
+  "reportedReadOnly": true,
+  "provenance": "User supplied the screenshot while reviewing this smoke task. The screenshot is authoritative for visual text; no automated Cloud response retrieval or branch-ancestry verification is claimed."
+}
