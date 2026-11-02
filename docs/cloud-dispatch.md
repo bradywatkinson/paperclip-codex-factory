@@ -2,7 +2,7 @@
 
 Issue [#3](https://github.com/bradywatkinson/paperclip-codex-factory/issues/3) adds an external, one-shot bridge using Paperclip's supported `process` adapter. It submits an assigned task through the tested Codex Cloud CLI, records the receipt, gives the Paperclip task an explicit external-wait disposition, and exits. It does not keep a local worker running while Cloud performs the task.
 
-The implementation is `lib/cloud-dispatch.mjs`, invoked by `scripts/cloud-dispatch.mjs`. It uses Node built-ins and changes no Paperclip core files. The reference versions are Paperclip `2026.1023.0`, Node `24.15.0`, and Codex CLI `0.166.0`. See the [Cloud compatibility matrix](codex-cloud/README.md) for the experimental CLI's observed behavior.
+The implementation is `lib/cloud-dispatch.mjs`, invoked by `scripts/cloud-dispatch.mjs`. It uses Node built-ins, including the transactional [execution journal](execution-journal.md), and changes no Paperclip core files. The reference versions are Paperclip `2026.1023.0`, Node `24.15.0`, and Codex CLI `0.166.0`. See the [Cloud compatibility matrix](codex-cloud/README.md) for the experimental CLI's observed behavior.
 
 ## Paperclip integration contract
 
@@ -33,6 +33,7 @@ This JSON schema is a bridge convention. It is not a built-in Paperclip feature 
 | `branch` | Explicit requested base branch, validated as a conservative Git ref. |
 | `mode` | `read_only` or `code_change`; determines the fixed dispatch policy. |
 | `codexCommand` | Optional absolute executable path; defaults to the controller user's `~/.local/bin/codex`. |
+| `attempt` | Optional logical attempt from 1 through 100; defaults to 1. A later attempt is explicit and requires every earlier attempt to be terminal. |
 | `dispatchTimeoutMs` | Optional submission deadline, 1,000–60,000 milliseconds; defaults to 60,000. It does not cancel a Cloud task. |
 
 The selected workspace must bind the same GitHub repository through an HTTPS GitHub URL or `git@github.com:` URL. An existing `repoRef`/`defaultRef` must match the configured branch. An arbitrary matching repository among several workspaces is not sufficient; use the primary workspace or an explicit `workspaceId`. If the task names `projectWorkspaceId`, that binding must match the selected workspace. The checkout response is checked again so a changed workspace cannot silently redirect the dispatch.
@@ -87,10 +88,10 @@ The bridge performs these steps:
 1. Validate context and configuration; fetch the current agent, running heartbeat, assigned issue, and project.
 2. Validate a bounded prompt containing issue ID, repository, requested base branch, title, description, and acceptance criteria. Task title is limited to 500 bytes, description to 24,000 bytes, and the complete prompt to 32,000 bytes. Oversized content is rejected rather than silently truncated.
 3. Check exact Codex version `0.166.0` and successful `Logged in using ChatGPT` status. The auth status may be on stderr; nonempty stderr alone is not a failure.
-4. Check out the task for the current run, revalidate its scope and workspace binding, rebuild the prompt from the latest checkout title/description, and create an exclusive issue-scoped dispatch guard.
+4. Check out the task for the current run, revalidate its scope and workspace binding, rebuild the prompt from the latest checkout title/description, then queue and atomically claim its logical execution in the journal. A durable compatibility fence precedes the claim.
 5. Execute one `codex cloud exec --env … --branch … --attempts 1` with the entire prompt as one literal argument. No shell is used.
 6. Accept only a single validated ChatGPT task URL as a receipt; retain the emitted URL and a `/remote/<taskId>` navigation URL separately.
-7. Save the receipt, then atomically add a positive confirmation comment with the Cloud link and set the issue to `blocked` with a dispatcher-owned reconciliation action (`owner: { "agentId": "<current agent ID>" }`). The comment says the Cloud submission is confirmed and the task is waiting for result review/reconciliation. Return the receipt and exit.
+7. Commit the accepted receipt in the journal, then atomically add a positive confirmation comment with the Cloud link and set the issue to `blocked` with a dispatcher-owned reconciliation action (`owner: { "agentId": "<current agent ID>" }`). The comment says the Cloud submission is confirmed and the task is waiting for result review/reconciliation. Return the receipt and exit.
 
 `read_only` prompts prohibit changes, commits, pushes, PRs, deployment, installation, and project-script execution. `code_change` prompts request a reviewable patch and test evidence, with requested-base-branch delivery information for human review. The tested CLI does not guarantee PR creation. Both modes prohibit merges and deployments; task text is JSON-encoded and cannot replace the bridge's fixed policy.
 
@@ -102,21 +103,29 @@ The bridge names the dispatcher agent as the structured unblock owner. In the in
 
 The local process waits only for API setup and submission, not Cloud execution. Each API request has a 10-second limit; each CLI preflight has a 10-second limit; the dispatch deadline comes from configuration. The example uses an outer process timeout of 180 seconds and a 10-second grace period to cover preflight, a 60-second submission, and bounded setup/handoff requests (approximately 150 seconds in the slow path). The previous 90-second outer budget could interrupt otherwise valid slow setup. A local deadline does not cancel already accepted Cloud work.
 
-## Dispatch guard and recovery
+## Execution journal and recovery
 
-The default guard path is:
+The [execution journal](execution-journal.md), currently schema 3, is now authoritative. It lives at:
 
 ```text
-~/.paperclip/instances/factory/data/cloud-dispatch/<companyId>/<issueId>.json
+~/.paperclip/instances/factory/data/cloud-dispatch/<companyId>/executions.sqlite
 ```
 
-`PAPERCLIP_HOME` and `PAPERCLIP_INSTANCE_ID` select the controller instance. The bridge creates private directories and a mode-0600 intent before submission, then records the accepted receipt. The key is the issue, so another heartbeat/run ID cannot bypass it.
+`PAPERCLIP_HOME` and `PAPERCLIP_INSTANCE_ID` select the controller instance. Original `<issueId>.json` guards remain untouched on migration; new immutable JSON compatibility fences prevent an older writer from claiming the same issue. They are not the current status store. Use `scripts/execution-journal.mjs get` to inspect the execution, events, and run associations.
 
-A repeated invocation with the same dispatched record returns `already_dispatched` without a second Cloud submission. For an already blocked task this path also makes no PATCH, including a possible `issue_unblock_requested` wake. A changed project/workspace/repository/environment/branch/mode mapping requires reconciliation. Existing blocked issues are not repeatedly commented merely to acknowledge the same receipt.
+The journal keys each logical attempt by company, issue, and explicit attempt number. A repeated invocation with the same accepted record returns `already_dispatched` without another Cloud submission. For an already blocked task it makes no PATCH. A changed project/workspace/repository/environment/branch/mode mapping requires reconciliation. The receipt retains its original dispatch-run ID and now also includes the execution ID, attempt, and execution state.
 
-Once submission has begun, deadlines, signals, output overflow, nonzero submission exits, malformed receipts, and failures recording the accepted handoff become `unknown`. During a running CLI command, outer `SIGTERM`/`SIGINT` handling stops its child process group, including the CLI wrapper and descendants. This local cleanup does not cancel any accepted Cloud job; the dispatch guard remains sticky and there is no automatic retry. An abrupt forced stop can leave the pre-submission intent for investigation. Any known Cloud task ID is retained. If the Paperclip update itself fails, the local intent/receipt still prevents redispatch.
+An internal `running` row means accepted Cloud work, not confirmed completion. A safely queued execution can resume after fresh validation and checkout. An existing `dispatching` row is not reclaimed because a new run appeared: the bridge first verifies that its original Paperclip heartbeat is terminal. Active or unverifiable owners remain untouched. Unknown outcomes stay blocked from automatic submission; explicit later attempts require all prior attempts to be terminal.
 
-Reconcile the guard and Cloud task inventory manually before any recovery. Do not remove a guard simply to force another submission. This is a minimal issue-level guard, not the complete durable execution journal, migration system, or restart reconciliation planned in #4 and #6.
+Deadlines, signals, output overflow, nonzero submission exits, malformed receipts, and failed accepted-handoff recording retain an unknown outcome and any known Cloud ID. `SIGTERM`/`SIGINT` stops the local CLI process group and descendants; this does not cancel Cloud work. A committed intent survives an abrupt local stop and prevents a blind retry. No raw child errors, credentials, or task prompts enter journal records.
+
+See [schema, state transitions, legacy migration, inspection, backup and cutover](execution-journal.md). Quiesce old dispatchers before migration or recovery; do not delete JSON fences or advance the attempt to bypass an unresolved submission. Automatic Cloud polling and Paperclip completion remain #5; broader startup reconciliation remains #6.
+
+## Journal migration verification — 2026-11-02
+
+The [additive migration observation](evidence/issue-4-execution-journal/live-migration.json) verifies import of PAP-2's original accepted guard with the sole process dispatcher paused. The initial schema-2 and integrity checks passed; original, backup, and post-import guard hashes matched. The same Cloud ID and original Paperclip run were retained, and repeat import preserved execution ID, revision 0, and one event. This migration submitted no Cloud work and changed no Paperclip task state.
+
+The imported journal state is `running` because the legacy guard proves acceptance only. It does not infer completion from PAP-2's manual closeout. Final schema-3 validation passed **63 reference-runtime tests**, including migration and crash-window tests. The [separate live schema upgrade](evidence/issue-4-execution-journal/schema-upgrade.json), performed after a stopped journal-directory backup, preserved the execution ID, receipt, original creation/dispatch times, revision, event count, and original guard bytes. It corrected import-audit timestamps to the recorded import observation time; it did not claim a new Cloud acceptance or change Paperclip task state. Full Mac-reboot and physical power-loss recovery remain untested. See [journal operations and verification](execution-journal.md).
 
 ## Observed live verification — 2026-11-02
 
@@ -150,9 +159,9 @@ For an authorized live smoke test:
 2. Create a separate `process` dispatcher agent with scheduled heartbeats disabled and no other assigned work.
 3. Assign one disposable `todo` task with explicit read-only acceptance criteria. Assignment may enqueue its run; inspect the run before adding a separate manual wakeup.
 4. Confirm the process uses its injected run ID to recover that task, submits exactly one Cloud job, returns a receipt promptly, and leaves the Paperclip task `blocked` with the Cloud link and dispatcher-owned reconciliation action.
-5. Confirm the guard contains the issue/run mapping, configured environment and branch, Cloud ID, emitted URL, and navigation URL. After the first run has finished, observe any conditional `issue_unblock_requested` wake or request one explicit local wake. Verify guard reuse without another PATCH or Cloud submission, distinguishing a captured return value from inference based on run/receipt metadata.
+5. Inspect the journal record and run associations for the issue/run mapping, attempt, state, configured environment and branch, Cloud ID, emitted URL, and navigation URL. After the first run has finished, observe any conditional `issue_unblock_requested` wake or request one explicit local wake. Verify guard reuse without another PATCH or Cloud submission, distinguishing a captured return value from inference based on run/receipt metadata.
 6. Observe Cloud completion separately. Keep final response content, base ancestry, PR delivery, failure behavior, and any unavailable result fields explicitly unverified until there is corresponding evidence.
 
-Capture sanitized command results and run/task IDs; exclude credentials and the sign-in approval URL. Keep each observed live result in the separate evidence record, with its provenance and unresolved checks. The observed smoke test does not establish complete #3 closeout or the later journal/reconciler behavior.
+Capture sanitized command results and run/task IDs; exclude credentials and the sign-in approval URL. Keep each observed live result in the separate evidence record, with its provenance and unresolved checks. The observed smoke test predates the journal and does not establish journal cutover, full restart recovery, or the later reconciler behavior.
 
 `read_only` is a prompt policy for the Cloud task, not an additional filesystem permission boundary enforced by this bridge. The disposable smoke agent is paused after verification; its completed task and receipts remain available for inspection.

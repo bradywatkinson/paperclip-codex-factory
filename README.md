@@ -4,7 +4,7 @@ A reusable, local Paperclip coordination service for an Apple Silicon Mac. The c
 
 Initial scope: persistent storage, authenticated local UI, backups, and a macOS login service. Application integration, production deployments, and automatic merges are outside this foundation.
 
-Published for review in [draft PR #17](https://github.com/bradywatkinson/paperclip-codex-factory/pull/17), covering the bootstrap, CLI contract spike, and dispatch bridge. `main` contains only the empty initial review base; the feature work remains on `issue-3-cloud-dispatch`. See [the publication record](docs/publication.md).
+The bootstrap, CLI contract spike, and dispatch bridge were merged through [PR #17](https://github.com/bradywatkinson/paperclip-codex-factory/pull/17). See [the publication record](docs/publication.md) for the initial review history.
 
 ## Versions and prerequisites
 
@@ -65,7 +65,13 @@ Issue [#3](https://github.com/bradywatkinson/paperclip-codex-factory/issues/3) a
 
 The live read-only smoke test dispatched Paperclip task PAP-2 in an 18.688-second local run; the Cloud task later reached READY with one attempt and zero reported changes. A second explicit local wake returned `already_dispatched` in 2.669 seconds with the same Cloud ID, unchanged guard, and no new receipt comment or submission. The user supplied the Cloud result screenshot, after which a Board operator manually marked PAP-2 done.
 
-All 28 local tests passed. See [the live evidence](docs/evidence/issue-3-cloud-dispatch/README.md). Automatic reconciliation remains future work under #5.
+The original smoke verification passed 28 local tests. See [the live evidence](docs/evidence/issue-3-cloud-dispatch/README.md). Automatic reconciliation remains future work under #5.
+
+## Durable execution journal
+
+Issue [#4](https://github.com/bradywatkinson/paperclip-codex-factory/issues/4) adds a SQLite journal for execution identity, attempts, state, receipts, transition history, and Paperclip run associations. The bridge uses a transactional claim before submission and retains unknown outcomes without automatic retries. Existing JSON guards import without changing their bytes, and compatibility fences prevent an older writer from bypassing the journal claim.
+
+See [the state model, schema migrations, inspection and cutover guide](docs/execution-journal.md). Final schema-3 validation passed **63/63 tests** on Node 24.15.0. The historical schema-2 [additive PAP-2 guard migration](docs/evidence/issue-4-execution-journal/live-migration.json) preserved the original file hash, Cloud ID, and original run; repeated import was stable, with no Cloud submission or Paperclip task change. The [live schema-3 upgrade](docs/evidence/issue-4-execution-journal/schema-upgrade.json) also preserved execution identity and receipt data while correcting import-audit timestamps to the original import observation. `running` means an accepted receipt, not confirmed Cloud completion. Full reboot/power-loss recovery remains untested; polling and automatic completion remain #5, and startup reconciliation remains #6.
 
 ## Upstream references
 
