@@ -95,6 +95,10 @@ node scripts/controller-recovery.mjs --config /absolute/path/to/cloud-reconcile.
 
 The same private configuration supports a consecutive polling-error limit (default 8), durable company-wide usage cooldown, and explicit resumption of read-only polling. Startup never submits Cloud work or resets ambiguous notification writes. No background service is installed automatically. See [startup behavior, operator recovery, and verification limits](docs/controller-recovery.md); process-restart fixture tests do not establish Mac reboot or physical power-loss recovery.
 
+## Single-repository demo
+
+Issue [#7](https://github.com/bradywatkinson/paperclip-codex-factory/issues/7) begins with a documentation-only Cloud delivery tracer. See [the reproducible procedure](docs/single-repository-demo.md), [task prompt](examples/single-repository-demo-task.md), and [preflight evidence](docs/evidence/issue-7-cloud-execution-demo.md). Live submission requires explicit approval. The tracer does not establish the issue's coding-change acceptance criterion; live patch delivery and controller interruption remain unverified.
+
 ## Upstream references
 
 - [Managed installation](https://docs.paperclip.ing/reference/cli/installation/)
