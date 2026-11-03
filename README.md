@@ -65,13 +65,25 @@ Issue [#3](https://github.com/bradywatkinson/paperclip-codex-factory/issues/3) a
 
 The live read-only smoke test dispatched Paperclip task PAP-2 in an 18.688-second local run; the Cloud task later reached READY with one attempt and zero reported changes. A second explicit local wake returned `already_dispatched` in 2.669 seconds with the same Cloud ID, unchanged guard, and no new receipt comment or submission. The user supplied the Cloud result screenshot, after which a Board operator manually marked PAP-2 done.
 
-The original smoke verification passed 28 local tests. See [the live evidence](docs/evidence/issue-3-cloud-dispatch/README.md). Automatic reconciliation remains future work under #5.
+The original smoke verification passed 28 local tests. See [the live evidence](docs/evidence/issue-3-cloud-dispatch/README.md). The notification-only reconciler below adds periodic Cloud observation; the original smoke record remains a historical dispatch/manual-closeout observation.
 
 ## Durable execution journal
 
 Issue [#4](https://github.com/bradywatkinson/paperclip-codex-factory/issues/4) adds a SQLite journal for execution identity, attempts, state, receipts, transition history, and Paperclip run associations. The bridge uses a transactional claim before submission and retains unknown outcomes without automatic retries. Existing JSON guards import without changing their bytes, and compatibility fences prevent an older writer from bypassing the journal claim.
 
-See [the state model, schema migrations, inspection and cutover guide](docs/execution-journal.md). Final schema-3 validation passed **63/63 tests** on Node 24.15.0. The historical schema-2 [additive PAP-2 guard migration](docs/evidence/issue-4-execution-journal/live-migration.json) preserved the original file hash, Cloud ID, and original run; repeated import was stable, with no Cloud submission or Paperclip task change. The [live schema-3 upgrade](docs/evidence/issue-4-execution-journal/schema-upgrade.json) also preserved execution identity and receipt data while correcting import-audit timestamps to the original import observation. `running` means an accepted receipt, not confirmed Cloud completion. Full reboot/power-loss recovery remains untested; polling and automatic completion remain #5, and startup reconciliation remains #6.
+See [the state model, schema migrations, inspection and cutover guide](docs/execution-journal.md). Historical schema-3 validation passed **63/63 tests** on Node 24.15.0. The schema-4 journal adds polling leases, sanitized observations, a durable notification outbox, and shared provider rate reservations; its journal tests passed **38/38**. The historical schema-2 [additive PAP-2 guard migration](docs/evidence/issue-4-execution-journal/live-migration.json) preserved the original file hash, Cloud ID, and original run; repeated import was stable, with no Cloud submission or Paperclip task change. The [live schema-3 upgrade](docs/evidence/issue-4-execution-journal/schema-upgrade.json) also preserved execution identity and receipt data while correcting import-audit timestamps to the original import observation. These historical records do not establish live schema-4 migration. `running` means an accepted receipt, not confirmed Cloud completion. Full reboot/power-loss recovery remains untested; startup reconciliation remains #6.
+
+## Cloud polling and review notifications
+
+Issue [#5](https://github.com/bradywatkinson/paperclip-codex-factory/issues/5) adds a foreground reconciler for known accepted Cloud executions. It polls the pinned CLI with bounded work and shared rate limits, records durable observations, and creates a human-only review-notification card when Cloud reports READY. It **preserves every Paperclip task status**: a blocked task stays blocked until an operator decides the next step. Accepting the card acknowledges the handoff without completing the task or continuing an agent run. Remote completion does not verify acceptance criteria, and unavailable final assistant output or PR metadata is stated explicitly.
+
+Copy [the example configuration](examples/cloud-reconcile.json) into private controller storage, replace its company and absolute paths, and use the existing Codex ChatGPT sign-in and Paperclip Board CLI sign-in. Run a bounded pass with a supported Node runtime:
+
+```sh
+node scripts/cloud-reconcile.mjs --config /absolute/path/to/cloud-reconcile.json --once
+```
+
+Use `--loop` for periodic foreground polling; no service is installed automatically. Durable notification state survives local interruptions. The card has a stable interaction idempotency key. An ambiguous write is checked for an existing exact card body/key created by the signed-in Board user and is never automatically resent. Cards have no continuation or addressee and do not wake a dispatcher. Board comments are deliberately avoided because the pinned release can implicitly reopen blocked/done tasks. See [configuration, operation, inspection, and delivery limits](docs/cloud-reconcile.md).
 
 ## Upstream references
 

@@ -18,7 +18,10 @@ try {
   journal = new ExecutionJournal({ directory: options.get('--state-dir'), companyId: options.get('--company-id') });
   let result;
   if (command === 'list') result = journal.list();
-  if (command === 'get') result = { execution: journal.get(options.get('--issue-id'), attempt), events: journal.events(options.get('--issue-id'), attempt), runs: journal.runs(options.get('--issue-id'), attempt) };
+  if (command === 'get') {
+    const execution = journal.get(options.get('--issue-id'), attempt);
+    result = { execution, events: journal.events(options.get('--issue-id'), attempt), runs: journal.runs(options.get('--issue-id'), attempt), polling: execution ? journal.polling(execution.executionId) : null, observations: execution ? journal.observations(execution.executionId) : [], handoffs: execution ? journal.handoffs(execution.executionId) : [] };
+  }
   if (command === 'migrate-guards') result = options.has('--issue-id') ? journal.importLegacyGuard(options.get('--issue-id')) : journal.importLegacyGuards();
   if (command === 'recover') result = journal.recoverInterrupted(options.get('--issue-id'), attempt);
   console.log(JSON.stringify({ journalSchemaVersion: JOURNAL_SCHEMA_VERSION, result }));
