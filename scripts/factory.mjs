@@ -12,6 +12,7 @@ const HELP = `Usage:
   factory controller --help
   factory controller service --help
   factory delivery inspect --help
+  factory review --help
   factory repo validate [--config .factory.yaml] [--policy POLICY] [--online --company UUID] [--json]
   factory repo add [--config .factory.yaml] [--policy POLICY] [--registry DIRECTORY] [--json]
   factory repo list [--registry DIRECTORY] [--json]
@@ -69,6 +70,10 @@ export async function runFactoryCli(args, { stdout = value => process.stdout.wri
   let registry;
   const json = args.includes('--json');
   try {
+    if (args[0] === 'review') {
+      const { runFactoryReviewCli } = await import('./factory-review.mjs');
+      return await runFactoryReviewCli(args.slice(1), { stdout, stderr, home, ...(run ? { run } : {}) });
+    }
     if (args[0] === 'scheduler') {
       const { runSchedulerCli } = await import('./factory-scheduler.mjs');
       return await runSchedulerCli(args.slice(1), { stdout, stderr, home });

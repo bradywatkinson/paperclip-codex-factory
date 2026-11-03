@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { inspectGitHubDelivery, summarizeDeliveryPatch } from '../lib/github-delivery.mjs';
+import { randomUUID } from 'node:crypto';
+import { inspectGitHubDelivery, inspectRepairGitHubDelivery, summarizeDeliveryPatch } from '../lib/github-delivery.mjs';
+import { configurationHash } from '../lib/repository-registry.mjs';
 
 const BASE = 'a'.repeat(40), HEAD = 'b'.repeat(40);
 const PATCH = 'diff --git a/src/demo.mjs b/src/demo.mjs\nindex aaaaaaa..bbbbbbb 100644\n--- a/src/demo.mjs\n+++ b/src/demo.mjs\n@@ -1 +1 @@\n-export const value = 1;\n+export const value = 2;\n';
@@ -201,4 +203,90 @@ test('unified-diff parser rejects prefixes, binary output, unsafe paths, empty a
   const summary = summarizeDeliveryPatch(PATCH);
   assert.deepEqual(summary.files, ['src/demo.mjs']); assert.equal(summary.additions, 1); assert.equal(summary.deletions, 1);
   for (const patch of ['', 'Here is your patch\n' + PATCH, PATCH.slice(0, -1), PATCH.replace('@@ -1 +1 @@', '@@ -2,2 +2,2 @@'), PATCH.replace('a/src/demo.mjs b/src/demo.mjs', 'a/../file b/../file'), 'diff --git a/file b/file\nBinary files a/file and b/file differ\n']) assert.throws(() => summarizeDeliveryPatch(patch), { code: 'UNSUPPORTED_PATCH_FORMAT' });
+});
+
+async function repairFixture() {
+  const original = fixture(), result = await original.inspect();
+  const previous = { schemaVersion: 1, observationId: randomUUID(), observedAt: result.observedAt, context: { configHash: configurationHash(original.repositoryConfig), policyHash: 'e'.repeat(64), journalSchemaVersion: 4, executionRevision: 2 }, delivery: result };
+  const newHead = 'e'.repeat(40), execution = { ...original.execution, executionId: randomUUID(), paperclipIssueId: randomUUID(), paperclipRunId: randomUUID(), branch: 'factory/change', cloudTaskId: 'task_e_' + 'f'.repeat(32) };
+  const delta = PATCH.replace('aaaaaaa..bbbbbbb', 'bbbbbbb..eeeeeee').replace('-export const value = 1;', '-export const value = 2;').replace('+export const value = 2;', '+export const value = 3;');
+  const full = PATCH.replace('aaaaaaa..bbbbbbb', 'aaaaaaa..eeeeeee').replace('+export const value = 2;', '+export const value = 3;');
+  const state = { calls: [], metadataReads: 0, headRace: false, cloudDelta: delta, githubDelta: delta, full, fullComparisonPatch: full, deltaBase: HEAD, deltaMergeBase: HEAD, fullBase: BASE, fileAdditions: 1,
+    pr: { ...structuredClone(original.state.pr), head: { ...structuredClone(original.state.pr.head), sha: newHead } }, checks: [{ ...original.state.checks[0], head_sha: newHead }], statuses: [], badStatusSha: false };
+  const output = value => ({ code: 0, stdout: typeof value === 'string' ? value : JSON.stringify(value), stderr: '' });
+  const run = async (command, args, options) => {
+    state.calls.push({ command, args, options });
+    if (command === original.runtime.codexCommand) {
+      if (args[0] === '--version') return output('codex-cli 0.166.0\n');
+      if (args[0] === 'login') return { code: 0, stdout: '', stderr: 'Logged in using ChatGPT' };
+      assert.deepEqual(args, ['cloud', 'diff', execution.cloudTaskId, '--attempt', '1']); return output(state.cloudDelta);
+    }
+    assert.equal(args[args.indexOf('--method') + 1], 'GET');
+    const resource = args.at(-1), diff = args.includes('Accept: application/vnd.github.diff');
+    if (resource.includes('/compare/')) {
+      const fullRange = resource.includes('/' + BASE + '...');
+      if (diff) return output(fullRange ? state.fullComparisonPatch : state.githubDelta);
+      const base = fullRange ? state.fullBase : state.deltaBase;
+      return output({ base_commit: { sha: base }, merge_base_commit: { sha: fullRange ? state.fullBase : state.deltaMergeBase }, status: 'ahead', ahead_by: 1, behind_by: 0, files: [{ filename: 'src/demo.mjs', additions: state.fileAdditions, deletions: 1 }] });
+    }
+    if (resource.includes('/check-runs?')) {
+      const page = Number(/page=(\d+)$/.exec(resource)[1]); return output({ total_count: state.checks.length, check_runs: state.checks.slice((page - 1) * 100, page * 100) });
+    }
+    if (resource.includes('/status?')) return output({ sha: state.badStatusSha ? HEAD : newHead, repository: { full_name: 'fixture/project' }, total_count: state.statuses.length, statuses: state.statuses });
+    assert.equal(resource, 'repos/fixture/project/pulls/9');
+    if (diff) return output(state.full);
+    const pr = structuredClone(state.pr); if (state.headRace && ++state.metadataReads > 1) pr.head.sha = '9'.repeat(40); return output(pr);
+  };
+  const inspect = extra => inspectRepairGitHubDelivery({ previousDeliveryObservation: previous, repairExecution: execution, repositoryConfig: original.repositoryConfig, expectedHeadSha: newHead, runtime: original.runtime, run, now: () => '2026-11-03T12:01:00.000Z', ...extra });
+  return { previous, execution, newHead, delta, full, state, inspect, run, repositoryConfig: original.repositoryConfig, runtime: original.runtime };
+}
+
+test('published repair delta is verified independently and the complete PR patch is captured last', async () => {
+  const f = await repairFixture(), captured = [];
+  const result = await f.inspect({ captureDelta: item => { captured.push(['delta', item.patch]); return { deltaPatchPath: '/private/tmp/fixture-delta.patch', deltaPatchSha256: item.summary.sha256 }; }, capturePatch: item => { captured.push(['full', item.patch]); } });
+  assert.equal(result.status, 'ready_for_independent_review');
+  assert.deepEqual(captured, [['delta', f.delta], ['full', f.full]]);
+  assert.equal(result.association.requestedBranch, 'factory/change'); assert.equal(result.association.deliveryBaseBranch, 'main');
+  assert.equal(result.provenance.comparison, 'exact_incremental_text_diff_with_full_pr');
+  assert.equal(result.provenance.incremental.previousHeadSha, HEAD); assert.equal(result.provenance.incremental.newHeadSha, f.newHead);
+  assert.equal(result.provenance.incremental.previousObservationId, f.previous.observationId);
+  assert.equal(result.provenance.incremental.cloudPatchSha256, summarizeDeliveryPatch(f.delta).sha256);
+  assert.equal(result.patch.sha256, summarizeDeliveryPatch(f.full).sha256); assert.notEqual(result.patch.sha256, result.deltaPatch.sha256);
+  assert.equal(result.provenance.cloudPatchSha256, undefined); assert.equal(result.humanApprovalEligible, false);
+});
+
+test('ordinary inspector still rejects a repair branch and invalid repair source bindings make no provider calls', async () => {
+  const f = await repairFixture();
+  await assert.rejects(inspectGitHubDelivery({ execution: f.execution, repositoryConfig: f.repositoryConfig, expectedBaseSha: BASE, expectedHeadSha: f.newHead, runtime: f.runtime, run: f.run }), { code: 'DELIVERY_REPOSITORY_MISMATCH' });
+  for (const extra of [{ repairExecution: { ...f.execution, cloudTaskId: f.previous.delivery.association.cloudTaskId } }, { repairExecution: { ...f.execution, companyId: randomUUID() } }, { expectedHeadSha: HEAD }, { pullRequest: { repository: 'fixture/project', number: 10 } }]) await assert.rejects(f.inspect(extra), { code: 'INVALID_REPAIR_DELIVERY_BINDING' });
+  const unverified = structuredClone(f.previous); unverified.delivery.provenance.verified = false;
+  await assert.rejects(f.inspect({ previousDeliveryObservation: unverified }), { code: 'PREVIOUS_DELIVERY_UNVERIFIED' });
+  assert.equal(f.state.calls.length, 0);
+});
+
+test('wrong previous head, unrelated branch, incomplete delta/full evidence and new-head races cannot pass repair provenance', async t => {
+  for (const [name, change, reason] of [
+    ['previous head', f => { f.state.deltaBase = '9'.repeat(40); }, 'GITHUB_REPAIR_ANCESTRY_UNVERIFIED'],
+    ['delta ancestry', f => { f.state.deltaMergeBase = BASE; }, 'GITHUB_REPAIR_ANCESTRY_UNVERIFIED'],
+    ['branch', f => { f.state.pr.head.ref = 'unrelated/branch'; }, 'GITHUB_REPAIR_BRANCH_MISMATCH'],
+    ['delta text', f => { f.state.githubDelta = f.delta.replace('+export const value = 3;', '+export const value = 4;'); }, 'GITHUB_CLOUD_REPAIR_DELTA_MISMATCH'],
+    ['delta metadata', f => { f.state.fileAdditions = 7; }, 'GITHUB_REPAIR_DELTA_INCOMPLETE'],
+    ['full metadata', f => { f.state.pr.changed_files = 2; }, 'GITHUB_PATCH_INCOMPLETE'],
+    ['full text', f => { f.state.full = f.full.replace('+export const value = 3;', '+export const value = 4;'); }, 'GITHUB_REPAIR_FULL_PATCH_MISMATCH'],
+    ['full ancestry', f => { f.state.fullBase = HEAD; }, 'GITHUB_REPAIR_ANCESTRY_UNVERIFIED'],
+    ['head changed', f => { f.state.headRace = true; }, 'GITHUB_PR_HEAD_MISMATCH'],
+  ]) await t.test(name, async () => {
+    const f = await repairFixture(); change(f); const result = await f.inspect();
+    assert.equal(result.status, 'needs_attention'); assert.equal(result.provenance.verified, false); assert.ok(result.reasons.includes(reason), result.reasons.join(','));
+  });
+});
+
+test('repair CI must be fresh at the new head and pagination remains bounded', async () => {
+  const f = await repairFixture(); f.state.checks[0].head_sha = HEAD;
+  assert.ok((await f.inspect()).reasons.includes('GITHUB_CHECKS_INCOMPLETE'));
+  f.state.checks[0].head_sha = f.newHead; f.state.checks[0].status = 'queued'; f.state.checks[0].conclusion = null;
+  assert.equal((await f.inspect()).checks.state, 'pending');
+  f.state.checks = Array.from({ length: 101 }, (_, i) => ({ ...f.state.checks[0], id: i + 1, name: i === 100 ? 'unit' : 'other-' + i, status: 'completed', conclusion: 'success' }));
+  assert.equal((await f.inspect()).status, 'ready_for_independent_review');
+  assert.ok((await f.inspect({ runtime: { ...f.runtime, maxPages: 1 } })).reasons.includes('GITHUB_CHECKS_INCOMPLETE'));
 });

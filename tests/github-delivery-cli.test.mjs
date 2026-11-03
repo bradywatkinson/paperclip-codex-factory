@@ -55,8 +55,58 @@ function setup(t) {
     const code = await runDeliveryCli(argv, { run, now: () => '2026-11-03T12:00:00.000Z', stdout: value => { stdout += value; }, stderr: value => { stderr += value; }, ...options });
     return { code, stdout, stderr };
   };
-  return { directory, registryDir, stateDir, artifactDir, registration, execution, state, args, invoke };
+  return { directory, registryDir, stateDir, artifactDir, registration, execution, state, args, invoke, run };
 }
+
+function notificationFixture(f) {
+  const agentId = '55555555-5555-4555-8555-555555555555', state = { calls: [], cards: [], unknown: false, terminal: false };
+  const output = value => ({ code: 0, stdout: JSON.stringify(value), stderr: '' });
+  const run = async (command, args, options) => {
+    if (command !== '/fixture/paperclip') return f.run(command, args, options);
+    state.calls.push(args); assert.equal(args.at(-1), '--json');
+    if (args[0] === 'whoami') return output({ userId: 'local-board', companyIds: [COMPANY] });
+    if (args[0] === 'run') return output({ id: RUN, companyId: COMPANY, agentId, status: 'succeeded', contextSnapshot: { issueId: ISSUE } });
+    if (args[0] === 'project') return output({ id: PROJECT, companyId: COMPANY, workspaces: [{ id: agentId, repoUrl: 'https://github.com/fixture/project', repoRef: 'main' }] });
+    if (args[1] === 'get') return output({ id: ISSUE, companyId: COMPANY, projectId: PROJECT, assigneeAgentId: agentId, assigneeUserId: null, status: state.terminal ? 'done' : 'blocked' });
+    if (args[1] === 'interactions') return output(state.cards);
+    assert.equal(args[1], 'interaction:create');
+    const payload = JSON.parse(args[args.indexOf('--payload-json') + 1]);
+    const card = { id: agentId, companyId: COMPANY, issueId: ISSUE, createdByUserId: 'local-board', createdByAgentId: null, ...payload };
+    state.cards.push(card);
+    if (state.unknown) return { code: 1, stdout: '', stderr: 'PRIVATE_PAPERCLIP_DIAGNOSTIC' };
+    return output(card);
+  };
+  const args = [...f.args, '--notify-paperclip', '--paperclip', '/fixture/paperclip', '--api-base', 'http://127.0.0.1:8100'];
+  return { state, args, run };
+}
+
+test('optional notification projects the freshly inspected actual journal result into one native card', async t => {
+  const f = setup(t), native = notificationFixture(f), output = await f.invoke(native.args, { run: native.run });
+  assert.equal(output.code, 0, output.stderr); const result = JSON.parse(output.stdout); assert.equal(result.notification.status, 'notified');
+  assert.equal(native.state.cards.length, 1); assert.match(native.state.cards[0].payload.detailsMarkdown, /Verified PR/);
+  assert.match(native.state.cards[0].payload.detailsMarkdown, /actions\/runs\/1/); assert.equal(native.state.cards[0].continuationPolicy, 'none');
+  assert.equal((await f.invoke(native.args, { run: native.run })).code, 0); assert.equal(native.state.cards.length, 1);
+  f.state.ciPending = true; const pending = await f.invoke(native.args, { run: native.run }); assert.equal(pending.code, 1);
+  assert.equal(JSON.parse(pending.stdout).notification.status, 'notified'); assert.equal(native.state.cards.length, 2); assert.match(native.state.cards[1].payload.detailsMarkdown, /CI_PENDING/);
+  assert.equal(native.state.calls.some(args => args.includes('wake') || args.includes('update') || args.includes('comment')), false);
+});
+
+test('optional notification keeps ambiguous native sends sticky and recovers the same card by reads', async t => {
+  const f = setup(t), native = notificationFixture(f); native.state.unknown = true;
+  const first = await f.invoke(native.args, { run: native.run }); assert.equal(first.code, 1); assert.equal(JSON.parse(first.stdout).notification.status, 'notification_unknown');
+  const second = await f.invoke(native.args, { run: native.run }); assert.equal(second.code, 0); assert.equal(JSON.parse(second.stdout).notification.status, 'notified');
+  assert.equal(native.state.calls.filter(args => args[1] === 'interaction:create').length, 1); assert.equal(first.stdout.includes('PRIVATE_PAPERCLIP_DIAGNOSTIC'), false);
+});
+
+test('optional notification skips terminal native tasks and requires explicit safe CLI flags before provider reads', async t => {
+  const f = setup(t), native = notificationFixture(f); native.state.terminal = true;
+  const output = await f.invoke(native.args, { run: native.run }); assert.equal(JSON.parse(output.stdout).notification.status, 'skipped'); assert.equal(native.state.cards.length, 0);
+  const before = f.state.calls.length;
+  for (const extra of [ ['--notify-paperclip'], ['--paperclip', '/fixture/paperclip'], ['--notify-paperclip', '--paperclip', '/fixture/paperclip', '--api-base', 'https://example.invalid'], ['--notify-paperclip', '--paperclip', '/fixture/paperclip', '--api-base', 'http://127.0.0.1:8100/path'] ]) {
+    const invalid = await f.invoke([...f.args, ...extra], { run: native.run }); assert.equal(invalid.code, 1); assert.match(invalid.stderr, /USAGE_GITHUB_DELIVERY/);
+  }
+  assert.equal(f.state.calls.length, before);
+});
 
 test('CLI durably associates actual journal execution, immutable GitHub provenance and captured patch', async t => {
   const f = setup(t), output = await f.invoke();
@@ -216,4 +266,94 @@ test('CLI retains the original artifact failure instead of masking it as missing
   assert.equal(output.stderr.includes('DELIVERY_PATCH_ARTIFACT_MISSING'), false);
   assert.equal(fs.readFileSync(filename, 'utf8'), 'conflicting artifact');
   assert.deepEqual(fs.readdirSync(directory), [digest(PATCH) + '.patch']);
+});
+
+async function prepareRepair(f) {
+  const initial = JSON.parse((await f.invoke()).stdout), previousPath = initial.artifacts.observationPath;
+  const newHead = 'e'.repeat(40), repairIssue = '66666666-6666-4666-8666-666666666666', repairRun = '77777777-7777-4777-8777-777777777777', repairCloud = 'task_e_' + 'f'.repeat(32);
+  const journal = new ExecutionJournal({ directory: f.stateDir, companyId: COMPANY });
+  let execution;
+  try {
+    journal.queue({ companyId: COMPANY, paperclipIssueId: repairIssue, paperclipRunId: repairRun, projectId: PROJECT, repository: 'fixture/project', environmentId: 'd'.repeat(32), branch: 'factory/demo', mode: 'code_change' });
+    journal.claim(repairIssue, repairRun);
+    const accepted = journal.accept(repairIssue, repairRun, { cloudTaskId: repairCloud, emittedUrl: 'https://chatgpt.com/codex/tasks/' + repairCloud, taskUrl: 'https://chatgpt.com/remote/' + repairCloud });
+    execution = journal.transition(repairIssue, { expectedState: 'running', expectedRevision: accepted.revision, toState: 'succeeded' });
+  } finally { journal.close(); }
+  const delta = PATCH.replace('aaaaaaa..bbbbbbb', 'bbbbbbb..eeeeeee').replace('-export const result = 1;', '-export const result = 2;').replace('+export const result = 2;', '+export const result = 3;');
+  const full = PATCH.replace('aaaaaaa..bbbbbbb', 'aaaaaaa..eeeeeee').replace('+export const result = 2;', '+export const result = 3;');
+  const state = { calls: [], staleCI: false, wrongDelta: false };
+  const output = value => ({ code: 0, stdout: typeof value === 'string' ? value : JSON.stringify(value), stderr: '' });
+  const run = async (command, args, options) => {
+    state.calls.push({ command, args, options });
+    if (command === '/fixture/codex') {
+      if (args[0] === '--version') return output('codex-cli 0.166.0\n');
+      if (args[0] === 'login') return { code: 0, stdout: '', stderr: 'Logged in using ChatGPT' };
+      assert.deepEqual(args, ['cloud', 'diff', repairCloud, '--attempt', '1']); return output(delta);
+    }
+    const resource = args.at(-1), diff = args.includes('Accept: application/vnd.github.diff');
+    assert.equal(args[args.indexOf('--method') + 1], 'GET');
+    if (resource.includes('/compare/')) {
+      const base = resource.includes('/' + HEAD + '...') ? HEAD : BASE;
+      if (diff) return output(base === BASE ? full : state.wrongDelta ? full : delta);
+      return output({ base_commit: { sha: base }, merge_base_commit: { sha: base }, status: 'ahead', ahead_by: 1, behind_by: 0, files: [{ filename: 'src/demo.mjs', additions: 1, deletions: 1 }] });
+    }
+    if (resource.includes('/check-runs?')) return output({ total_count: 1, check_runs: [{ id: 2, name: 'unit', head_sha: state.staleCI ? HEAD : newHead, status: 'completed', conclusion: 'success', html_url: 'https://github.com/fixture/project/actions/runs/2' }] });
+    if (resource.includes('/status?')) return output({ sha: newHead, repository: { full_name: 'fixture/project' }, total_count: 0, statuses: [] });
+    assert.equal(resource, 'repos/fixture/project/pulls/9');
+    if (diff) return output(full);
+    return output({ number: 9, html_url: 'https://github.com/fixture/project/pull/9', state: 'open', merged: false, draft: false, base: { ref: 'main', sha: BASE, repo: { full_name: 'fixture/project' } }, head: { ref: 'factory/demo', sha: newHead, repo: { full_name: 'fixture/project' } }, changed_files: 1, additions: 1, deletions: 1 });
+  };
+  const args = [...f.args, '--previous-observation', previousPath]; args[args.indexOf('--issue') + 1] = repairIssue; args[args.indexOf('--head') + 1] = newHead;
+  return { previousPath, initial, execution, delta, full, state, run, args };
+}
+
+test('repair CLI persists both raw delta and complete PR patch with typed immutable provenance across restart', async t => {
+  const f = setup(t), r = await prepareRepair(f), inspected = await f.invoke(r.args, { run: r.run });
+  assert.equal(inspected.code, 0, inspected.stderr);
+  const result = JSON.parse(inspected.stdout), saved = JSON.parse(fs.readFileSync(result.artifacts.observationPath));
+  assert.equal(result.association.requestedBranch, 'factory/demo'); assert.equal(result.association.deliveryBaseBranch, 'main');
+  assert.equal(result.association.executionId, r.execution.executionId);
+  assert.equal(saved.delivery.provenance.comparison, 'exact_incremental_text_diff_with_full_pr');
+  assert.equal(saved.delivery.provenance.incremental.previousObservationId, r.initial.artifacts.observationId);
+  assert.equal(saved.delivery.deltaPatch.sha256, digest(r.delta)); assert.equal(saved.delivery.patch.sha256, digest(r.full));
+  assert.equal(fs.readFileSync(saved.deltaArtifact.path, 'utf8'), r.delta); assert.equal(fs.readFileSync(saved.patchArtifact.path, 'utf8'), r.full);
+  assert.equal(saved.deltaArtifact.sha256, digest(r.delta)); assert.equal(saved.patchArtifact.sha256, digest(r.full));
+  for (const file of [saved.deltaArtifact.path, saved.patchArtifact.path]) assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+  const afterRestart = JSON.parse((await f.invoke(r.args, { run: r.run })).stdout);
+  assert.equal(afterRestart.artifacts.patchPath, result.artifacts.patchPath); assert.equal(afterRestart.artifacts.deltaPatchPath, result.artifacts.deltaPatchPath);
+  assert.notEqual(afterRestart.artifacts.observationId, result.artifacts.observationId);
+  assert.equal(r.state.calls.some(call => call.args.includes('exec')), false);
+});
+
+test('repair CLI preserves rejected delta and fresh CI failures without treating them as delivered repairs', async t => {
+  const f = setup(t), r = await prepareRepair(f); r.state.wrongDelta = true;
+  const rejected = await f.invoke(r.args, { run: r.run }), mismatch = JSON.parse(rejected.stdout);
+  assert.equal(rejected.code, 1); assert.ok(mismatch.reasons.includes('GITHUB_CLOUD_REPAIR_DELTA_MISMATCH'));
+  const mismatchRecord = JSON.parse(fs.readFileSync(mismatch.artifacts.observationPath));
+  assert.equal(fs.readFileSync(mismatchRecord.deltaArtifact.path, 'utf8'), r.delta); assert.equal(mismatchRecord.patchArtifact, undefined);
+  r.state.wrongDelta = false; r.state.staleCI = true;
+  const stale = await f.invoke(r.args, { run: r.run }), result = JSON.parse(stale.stdout);
+  assert.equal(stale.code, 1); assert.equal(result.provenance.verified, false); assert.ok(result.reasons.includes('GITHUB_CHECKS_INCOMPLETE'));
+  assert.equal(fs.readFileSync(result.artifacts.patchPath, 'utf8'), r.full);
+});
+
+test('repair CLI rejects changed policy/base observations and symlink inputs before provider reads', async t => {
+  const f = setup(t), r = await prepareRepair(f), previous = JSON.parse(fs.readFileSync(r.previousPath));
+  previous.context.policyHash = '0'.repeat(64); fs.writeFileSync(r.previousPath, JSON.stringify(previous));
+  const changed = await f.invoke(r.args, { run: r.run });
+  assert.equal(JSON.parse(changed.stderr).code, 'INVALID_PREVIOUS_DELIVERY'); assert.equal(r.state.calls.length, 0);
+  const linked = path.join(f.directory, 'previous-link.json'); fs.symlinkSync(r.previousPath, linked);
+  const args = [...r.args]; args[args.indexOf('--previous-observation') + 1] = linked;
+  assert.equal(JSON.parse((await f.invoke(args, { run: r.run })).stderr).code, 'INVALID_PREVIOUS_DELIVERY');
+  assert.equal(r.state.calls.length, 0);
+});
+
+test('a reused artifact store never attributes an earlier full patch to a later delta-only failure', t => {
+  const f = setup(t), store = new DeliveryArtifactStore({ directory: f.artifactDir }), association = { executionId: f.execution.executionId, cloudTaskId: CLOUD };
+  const summary = summarizeDeliveryPatch(PATCH);
+  store.capturePatch({ patch: PATCH, summary, association }); store.captureDelta({ patch: PATCH, summary, association });
+  const written = store.recordObservation({ result: { schemaVersion: 1, status: 'needs_attention', association, deltaPatch: summary, reasons: ['GITHUB_CLOUD_REPAIR_DELTA_MISMATCH'], observedAt: '2026-11-03T12:00:00.000Z' }, context: { configHash: f.registration.configHash, policyHash: f.registration.policyHash, journalSchemaVersion: 4, executionRevision: f.execution.revision } });
+  const saved = JSON.parse(fs.readFileSync(written.observationPath));
+  assert.equal(saved.patchArtifact, undefined); assert.equal(written.patchPath, undefined);
+  assert.equal(saved.deltaArtifact.sha256, summary.sha256);
 });

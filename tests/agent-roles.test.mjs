@@ -194,3 +194,21 @@ test('human queue requires separate exact-head external evidence, never a model 
   assert.equal(nextRoleAction({ role: 'qa', result, verifiedEvidence: { ...verifiedEvidence, independentReviewClean: false } }).action, 'wait');
   assert.throws(() => nextRoleAction({ role: 'qa', result: { ...result, verifiedEvidence }, verifiedEvidence }), rejected('INVALID_ROLE_RESULT'));
 });
+
+test('trusted artifact option pins base checkout, actual execution file and unverified result envelope', () => {
+  const patch = 'diff --git a/value b/value\n--- a/value\n+++ b/value\n@@ -1 +1 @@\n-old\n+new\n';
+  const executionId = 'b22b2222-2222-4222-8222-222222222222', sourceId = 'c33c3333-3333-4333-8333-333333333333';
+  const binding = { pipelineId: taskId, jobId: taskId, roleExecutionId: executionId, sourceExecutionId: sourceId, repository, pullRequestNumber: 42, baseSha, headSha, sourcePatchSha256: createHash('sha256').update(patch).digest('hex') };
+  const options = { trustedArtifact: { checkoutMode: 'provided_patch_on_base', expectedCheckoutSha: baseSha, binding, sourcePatch: patch } };
+  const input = context({ role: 'reviewer', pullRequest: pr(), receipt: { executionId: sourceId, cloudTaskId: 'task_e_' + 'c'.repeat(32), taskUrl: 'https://chatgpt.com/remote/task_e_' + 'c'.repeat(32) } });
+  const prompt = renderAgentRole(input, options);
+  assert.equal(extractContext(prompt).expectedCheckoutSha, baseSha);
+  assert.match(prompt, new RegExp('\\.factory/reviews/' + executionId + '\\.json'));
+  assert.match(prompt, /git add --intent-to-add --/); assert.match(prompt, /do not apply it/);
+  assert.match(prompt, /"evidenceVerified":false/); assert.ok(prompt.includes(JSON.stringify(patch)));
+  assert.throws(() => renderAgentRole({ ...input, trustedArtifact: options.trustedArtifact }), rejected('INVALID_ROLE_CONTEXT'));
+  assert.throws(() => renderAgentRole(input, { trustedArtifact: { ...options.trustedArtifact, sourcePatch: patch + 'changed' } }), rejected('INVALID_TRUSTED_ROLE_ARTIFACT'));
+  assert.throws(() => renderAgentRole({ ...input, role: 'qa' }, options), rejected('INVALID_TRUSTED_ROLE_ARTIFACT'));
+  const qa = renderAgentRole({ ...input, role: 'qa' }, { trustedArtifact: { ...options.trustedArtifact, checkoutMode: 'exact_head', expectedCheckoutSha: headSha } });
+  assert.equal(extractContext(qa).expectedCheckoutSha, headSha);
+});

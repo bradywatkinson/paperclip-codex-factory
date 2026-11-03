@@ -6,8 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { ExecutionJournal, JOURNAL_FILENAME, JOURNAL_SCHEMA_VERSION, JOURNAL_APPLICATION_ID } from '../lib/execution-journal.mjs';
 import { RepositoryRegistry } from '../lib/repository-registry.mjs';
-import { inspectGitHubDelivery } from '../lib/github-delivery.mjs';
+import { inspectGitHubDelivery, inspectRepairGitHubDelivery } from '../lib/github-delivery.mjs';
 import { DeliveryArtifactStore } from '../lib/delivery-artifacts.mjs';
+import { notifyDeliveryFromPaperclip } from '../lib/delivery-notification.mjs';
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const SHA = /^[a-f0-9]{40}$/;
@@ -15,14 +16,19 @@ const HELP = `Usage: node scripts/github-delivery.mjs
   --registry ABS_DIRECTORY --repository OWNER/REPO --state-dir EXISTING_ABS_DIRECTORY
   --company UUID --issue UUID --base IMMUTABLE_SHA --artifact-dir ABS_DIRECTORY
   [--attempt 1] [--head IMMUTABLE_SHA --pr NUMBER]
+  [--previous-observation ABS_JSON_FILE --head NEW_IMMUTABLE_SHA]
+  [--notify-paperclip --paperclip ABS_PAPERCLIP_EXECUTABLE --api-base http://127.0.0.1:8100]
   [--github ABS_GH_EXECUTABLE] [--codex ABS_CODEX_EXECUTABLE] [--json]
 
 Reads an existing registered repository and journal execution. Never dispatches,
 applies patches, pushes, creates PRs, merges, deploys, or changes Paperclip status.
 Without --pr, captures a patch fallback with unverified base/head provenance.
 Passing CI and provenance permit independent review only, not human approval.
+Repair mode verifies an already published incremental patch; publication is manual.
+Opt-in notification creates one informational human-only Paperclip card. It does
+not approve work, change task status, or wake agents. Unknown writes are read-recovered only.
 `;
-const FLAGS = new Set(['--registry', '--repository', '--state-dir', '--company', '--issue', '--attempt', '--base', '--head', '--pr', '--github', '--codex', '--artifact-dir']);
+const FLAGS = new Set(['--registry', '--repository', '--state-dir', '--company', '--issue', '--attempt', '--base', '--head', '--pr', '--github', '--codex', '--artifact-dir', '--previous-observation', '--paperclip', '--api-base']);
 const advice = {
   USAGE_GITHUB_DELIVERY: 'Use --help for the required identifiers, immutable base SHA, and absolute storage paths.',
   DELIVERY_REGISTRY_NOT_FOUND: 'Register the repository with factory repo add before inspecting delivery.',
@@ -46,7 +52,7 @@ function parse(args, home) {
   for (let index = 0; index < args.length; index++) {
     const flag = args[index];
     if (values.has(flag)) failure('USAGE_GITHUB_DELIVERY');
-    if (flag === '--json') values.set(flag, true);
+    if (['--json', '--notify-paperclip'].includes(flag)) values.set(flag, true);
     else if (FLAGS.has(flag)) {
       const value = args[++index]; if (!value || value.startsWith('--')) failure('USAGE_GITHUB_DELIVERY');
       values.set(flag, value);
@@ -57,10 +63,16 @@ function parse(args, home) {
   const attempt = values.has('--attempt') ? Number(values.get('--attempt')) : 1;
   if (!Number.isInteger(attempt) || attempt < 1 || attempt > 100) failure('USAGE_GITHUB_DELIVERY');
   if (values.has('--head') && !SHA.test(values.get('--head'))) failure('USAGE_GITHUB_DELIVERY');
+  if (values.has('--previous-observation') && (!absolute(values.get('--previous-observation')) || !values.has('--head'))) failure('USAGE_GITHUB_DELIVERY');
   const pr = values.has('--pr') ? Number(values.get('--pr')) : undefined;
   if (pr !== undefined && (!Number.isSafeInteger(pr) || pr < 1 || !values.has('--head'))) failure('USAGE_GITHUB_DELIVERY');
   const runtime = { githubCommand: values.get('--github') ?? '/opt/homebrew/bin/gh', codexCommand: values.get('--codex') ?? path.join(home, '.local/bin/codex') };
   if (!absolute(runtime.githubCommand) || !absolute(runtime.codexCommand)) failure('USAGE_GITHUB_DELIVERY');
+  if (values.has('--notify-paperclip')) {
+    if (!absolute(values.get('--paperclip'))) failure('USAGE_GITHUB_DELIVERY');
+    let url; try { url = new URL(values.get('--api-base')); } catch { failure('USAGE_GITHUB_DELIVERY'); }
+    if (url.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) || url.username || url.password || url.search || url.hash || url.pathname !== '/') failure('USAGE_GITHUB_DELIVERY');
+  } else if (values.has('--paperclip') || values.has('--api-base')) failure('USAGE_GITHUB_DELIVERY');
   return { values, attempt, pr, runtime };
 }
 function checkJournalSchema(directory) {
@@ -88,13 +100,28 @@ export async function runDeliveryCli(args, { stdout = value => process.stdout.wr
     if (!execution) failure('DELIVERY_EXECUTION_NOT_FOUND');
     const artifacts = new DeliveryArtifactStore({ directory: values.get('--artifact-dir') });
     let captureFailure;
-    const result = await inspectGitHubDelivery({ execution, repositoryConfig: registration.config, expectedBaseSha: values.get('--base'), expectedHeadSha: values.get('--head'), pullRequest: pr === undefined ? null : { repository: registration.repository, number: pr }, runtime, env, ...(run ? { run } : {}), ...(now ? { now } : {}), capturePatch: evidence => {
+    const shared = { repositoryConfig: registration.config, expectedHeadSha: values.get('--head'), runtime, env, ...(run ? { run } : {}), ...(now ? { now } : {}), capturePatch: evidence => {
       try { return artifacts.capturePatch(evidence); }
       catch (error) { captureFailure = error; throw error; }
-    } });
+    } };
+    let result;
+    if (values.has('--previous-observation')) {
+      const filename = values.get('--previous-observation'); let previous;
+      try {
+        const stat = fs.lstatSync(filename);
+        if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 2_000_000) failure('INVALID_PREVIOUS_DELIVERY');
+        previous = JSON.parse(fs.readFileSync(filename, 'utf8'));
+      } catch { failure('INVALID_PREVIOUS_DELIVERY'); }
+      if (previous.context?.configHash !== registration.configHash || previous.context?.policyHash !== registration.policyHash || previous.delivery?.association?.expectedBaseSha !== values.get('--base')) failure('INVALID_PREVIOUS_DELIVERY');
+      result = await inspectRepairGitHubDelivery({ ...shared, previousDeliveryObservation: previous, repairExecution: execution, ...(pr === undefined ? {} : { pullRequest: { repository: registration.repository, number: pr } }), captureDelta: evidence => {
+        try { return artifacts.captureDelta(evidence); }
+        catch (error) { captureFailure = error; throw error; }
+      } });
+    } else result = await inspectGitHubDelivery({ ...shared, execution, expectedBaseSha: values.get('--base'), pullRequest: pr === undefined ? null : { repository: registration.repository, number: pr } });
     if (captureFailure) throw captureFailure;
     const recorded = artifacts.recordObservation({ result, context: { configHash: registration.configHash, policyHash: registration.policyHash, journalSchemaVersion: JOURNAL_SCHEMA_VERSION, executionRevision: execution.revision } });
     const output = { status: result.status, association: result.association, provenance: result.provenance, checks: { state: result.checks.state, required: result.checks.required.map(check => ({ name: check.name, state: check.state, links: check.observations?.map(row => row.url).filter(Boolean) ?? [] })) }, reasons: result.reasons, humanApprovalEligible: false, artifacts: recorded };
+    if (values.has('--notify-paperclip')) output.notification = await notifyDeliveryFromPaperclip({ observation: JSON.parse(fs.readFileSync(recorded.observationPath, 'utf8')), execution, registration, directory: path.join(values.get('--artifact-dir'), 'notifications'), runtime: { paperclipCommand: values.get('--paperclip'), apiBase: values.get('--api-base') }, ...(run ? { run } : {}), ...(now ? { now } : {}), env });
     if (json) stdout(JSON.stringify(output) + '\n');
     else {
       stdout(`${output.status}\n  Cloud: ${output.association.cloudTaskUrl}\n`);
@@ -107,9 +134,11 @@ export async function runDeliveryCli(args, { stdout = value => process.stdout.wr
       if (output.reasons.length) stdout(`  Attention: ${output.reasons.join(', ')}\n`);
       stdout(`  Observation: ${recorded.observationPath}\n`);
       if (recorded.patchPath) stdout(`  Patch: ${recorded.patchPath}\n`);
+      if (recorded.deltaPatchPath) stdout(`  Repair delta: ${recorded.deltaPatchPath}\n`);
+      if (output.notification) stdout(`  Paperclip notification: ${output.notification.status}${output.notification.code ? ' (' + output.notification.code + ')' : ''}\n`);
       stdout('  Independent review and explicit human approval are still required.\n');
     }
-    return result.status === 'ready_for_independent_review' ? 0 : 1;
+    return result.status === 'ready_for_independent_review' && !['notification_unknown', 'deferred'].includes(output.notification?.status) ? 0 : 1;
   } catch (error) {
     const code = typeof error.code === 'string' && /^[A-Z][A-Z0-9_]{0,99}$/.test(error.code) ? error.code : 'DELIVERY_COMMAND_FAILED';
     const result = { status: 'needs_attention', code, correction: advice[code] ?? 'Inspect the original execution and delivery prerequisites; no remote write or automatic retry was made.' };
