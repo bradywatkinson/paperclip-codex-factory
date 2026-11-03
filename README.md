@@ -99,6 +99,21 @@ The same private configuration supports a consecutive polling-error limit (defau
 
 Issue [#7](https://github.com/bradywatkinson/paperclip-codex-factory/issues/7) proposes a useful coding change with focused tests in Story Keeper. See [the reproducible procedure](docs/single-repository-demo.md), [coding task prompt](examples/single-repository-coding-task.md), and [preflight evidence](docs/evidence/issue-7-cloud-execution-demo.md). Live submission requires explicit approval; patch delivery and live controller interruption remain unverified.
 
+## Factory operator CLI
+
+The [epic acceptance audit](docs/epic-status.md) tracks remaining live and operational checks. The factory CLI requires the repository dependencies and supported Node runtime:
+
+```sh
+npm ci --ignore-scripts
+FACTORY_NODE="$HOME/.local/share/paperclip-runtime-next/node_modules/node/bin/node"
+"$FACTORY_NODE" scripts/factory.mjs repo validate --config examples/repositories/node-service.factory.yaml --json
+"$FACTORY_NODE" scripts/factory.mjs repo --help
+"$FACTORY_NODE" scripts/factory.mjs scheduler --help
+"$FACTORY_NODE" scripts/factory.mjs delivery inspect --help
+```
+
+See [repository configuration and onboarding](docs/repository-onboarding.md). Validation is separate from successful execution; bootstrapping never submits a Cloud job.
+
 ## Upstream references
 
 - [Managed installation](https://docs.paperclip.ing/reference/cli/installation/)
