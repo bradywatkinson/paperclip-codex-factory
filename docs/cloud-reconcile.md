@@ -29,10 +29,12 @@ Copy [the example](../examples/cloud-reconcile.json) to private controller confi
 | `maxPages` | Maximum Cloud list pages per execution; default `5`. |
 | `requestGapMs` | Shared minimum gap between provider requests; default `1000`. |
 | `commandTimeoutMs` | Per-command local deadline; default `15000`. It does not cancel remote work. |
-| `leaseMs` | Durable work-claim lifetime; default `120000`. |
+| `leaseMs` | Durable work-claim lifetime; default `120000`. It must exceed the configured worst-case command budget described below. |
 | `maxOutputBytes` | Bound on captured command output; default `256000`. |
 
 There is no task-status mode in the reconciler configuration. Delivery is notification only.
+
+`leaseMs` must be greater than `max(maxPages × (commandTimeoutMs + requestGapMs), 5 × commandTimeoutMs) + requestGapMs`. Configuration that cannot fit its own polling/delivery command budget is rejected before work starts. Contention can still consume a lease; a command is bounded by its remaining lease deadline, and an expired result cannot commit.
 
 Use the normal Paperclip Board CLI sign-in flow, with the same user who will run the reconciler:
 
@@ -77,7 +79,7 @@ Source inspection of the pinned Paperclip release showed that Board-authenticate
 
 ## Inspection and verification
 
-Each CLI pass prints a JSON `status: reconciled` record with `polled`, `ready`, `notified`, `skipped`, and `unresolved` counts. Operational failures can remain unresolved with a future retry schedule; a completed pass is not proof that every notification was delivered. Startup/configuration failures emit `status: needs_attention`, a stable error code, and a nonzero exit.
+Each CLI pass prints JSON with `polled`, `ready`, `notified`, `skipped`, and `unresolved` counts. Its status is `reconciled` when `unresolved` is zero and `needs_attention` otherwise. Operational failures can remain unresolved with a future retry schedule; a completed pass is not proof that every notification was delivered. Startup/configuration failures also emit `status: needs_attention`, a stable error code, and a nonzero exit.
 
 Use `scripts/execution-journal.mjs get` with the company, issue, and attempt to inspect execution state, polling schedule, observations, and handoffs. The [journal inspection guide](execution-journal.md#local-inspection-and-cutover) shows the full command. A `succeeded` execution with a pending/unknown handoff is a completed Cloud job with unresolved notification delivery, not an accepted Paperclip task.
 
@@ -89,3 +91,5 @@ node --test tests/*.test.mjs
 ```
 
 Tests use disposable journals and inert CLI fixtures. Journal coverage includes concurrent claims and rate reservations, expired leases, stale timestamps/revisions, atomic READY/outbox commits, schema upgrades, safe evidence storage, and ambiguous-write fencing. These checks do not establish live notification delivery or restart/power-loss behavior. No new Cloud job is needed to verify polling of an existing accepted task; any live verification should retain its separate provenance and exclude credentials.
+
+Final reference-runtime validation passed **100/100 tests**. A [disposable local Paperclip task](evidence/issue-5-reconciliation.md) verified interaction creation, unchanged blocked status, idempotent replay, and rejection on a terminal task. A [separate pass over the existing accepted Cloud task](evidence/issue-5-cloud-poll.md) migrated its backed-up journal to schema 4, recorded READY, and skipped notification because PAP-2 was already done. It returned `polled: 1`, `ready: 1`, `notified: 0`, `skipped: 1`, `unresolved: 0`; PAP-2's status version and update timestamp were unchanged. Neither live check submitted a Cloud job.
