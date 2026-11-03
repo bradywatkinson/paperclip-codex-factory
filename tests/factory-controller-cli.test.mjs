@@ -38,7 +38,8 @@ function setup(t, { queued = true } = {}) {
     if (args[0] === 'issue' && args[1] === 'get') return { id: entry.issueId, companyId: entry.companyId, projectId: entry.projectId, projectWorkspaceId: entry.workspaceId, assigneeAgentId: entry.agentId, assigneeUserId: null, status: 'in_progress', title: 'Fix an isolated fixture', description: `Factory base SHA: ${BASE}\nRun approved focused checks and return evidence.` };
     if (args[0] === 'run') return { id: args[2], companyId: entry.companyId, agentId: entry.agentId, status: 'succeeded', contextSnapshot: { issueId: entry.issueId } };
     if (args[0] === 'issue' && args[1] === 'live-runs') return [];
-    if (args[0] === 'agent' && args[1] === 'configuration') return { id: entry.agentId, companyId: entry.companyId, status: 'idle', adapterType: 'process', adapterConfig: { command: entry.runtime.nodeCommand, args: [path.join(entry.runtime.factoryRoot, 'scripts/cloud-dispatch.mjs'), '--config', entry.plan.dispatchConfigPath], cwd: entry.runtime.factoryRoot, timeoutSec: 180, graceSec: 10 }, runtimeConfig: { heartbeat: { enabled: false, intervalSec: 0, wakeOnDemand: true, maxConcurrentRuns: 1 } }, metadata: { factory: { registrationId: entry.operationId, repository: entry.registration.repository } } };
+    if (args[0] === 'agent' && args[1] === 'get') return { id: entry.agentId, companyId: entry.companyId, status: 'idle', adapterType: 'process', metadata: { factory: { registrationId: entry.operationId, repository: entry.registration.repository } } };
+    if (args[0] === 'agent' && args[1] === 'configuration') return { id: entry.agentId, companyId: entry.companyId, status: 'idle', adapterType: 'process', adapterConfig: { command: entry.runtime.nodeCommand, args: [path.join(entry.runtime.factoryRoot, 'scripts/cloud-dispatch.mjs'), '--config', entry.plan.dispatchConfigPath], cwd: entry.runtime.factoryRoot, timeoutSec: 180, graceSec: 10 }, runtimeConfig: { heartbeat: { enabled: false, intervalSec: 0, wakeOnDemand: true, maxConcurrentRuns: 1 } } };
     if (args[0] === 'project') return { id: entry.projectId, companyId: entry.companyId, workspaces: [{ id: entry.workspaceId, companyId: entry.companyId, projectId: entry.projectId, repoUrl: 'https://github.com/' + entry.registration.repository, repoRef: 'main', defaultRef: 'main', isPrimary: true }] };
     if (args[0] === 'agent' && args[1] === 'wake') return { id: entry.wakeId, companyId: entry.companyId, agentId: entry.agentId, status: 'succeeded', contextSnapshot: { issueId: entry.issueId } };
     throw new Error('Unexpected inert fixture command');
@@ -61,7 +62,7 @@ function setup(t, { queued = true } = {}) {
   const materializeSubprocessFixture = () => {
     // The child runs only this inert executable. It neither calls Paperclip nor
     // invokes the real dispatcher/provider; all bindings live in temporary state.
-    fs.writeFileSync(modelFile, JSON.stringify({ entries, responses: Object.fromEntries(entries.map(entry => [entry.companyId, { issue: response(entry, ['issue', 'get', entry.issueId]), owner: response(entry, ['run', 'get', entry.ownerId]), agent: response(entry, ['agent', 'configuration', entry.agentId]), project: response(entry, ['project', 'get', entry.projectId]), wake: response(entry, ['agent', 'wake', entry.agentId]) }])) }));
+    fs.writeFileSync(modelFile, JSON.stringify({ entries, responses: Object.fromEntries(entries.map(entry => [entry.companyId, { issue: response(entry, ['issue', 'get', entry.issueId]), owner: response(entry, ['run', 'get', entry.ownerId]), agentOwner: response(entry, ['agent', 'get', entry.agentId]), agent: response(entry, ['agent', 'configuration', entry.agentId]), project: response(entry, ['project', 'get', entry.projectId]), wake: response(entry, ['agent', 'wake', entry.agentId]) }])) }));
     fs.writeFileSync(fakePaperclip, `#!${process.execPath}\nimport fs from 'node:fs';
 const model=JSON.parse(fs.readFileSync(${JSON.stringify(modelFile)},'utf8'));
 const args=process.argv.slice(2),entry=model.entries.find(row=>[row.issueId,row.ownerId,row.agentId,row.projectId,row.wakeId].includes(args[2]));
@@ -70,6 +71,7 @@ const data=model.responses[entry.companyId];let value;
 if(args[0]==='issue'&&args[1]==='get')value=data.issue;
 else if(args[0]==='run')value={...data.owner,id:args[2]};
 else if(args[0]==='issue'&&args[1]==='live-runs')value=[];
+else if(args[0]==='agent'&&args[1]==='get')value=data.agentOwner;
 else if(args[0]==='agent'&&args[1]==='configuration')value=data.agent;
 else if(args[0]==='project')value=data.project;
 else if(args[0]==='agent'&&args[1]==='wake'){fs.appendFileSync(${JSON.stringify(wakeFile)},JSON.stringify({args})+'\\n');value=data.wake}

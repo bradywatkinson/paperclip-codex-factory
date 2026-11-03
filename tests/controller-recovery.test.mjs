@@ -6,6 +6,23 @@ import test from 'node:test';
 import { ExecutionJournal } from '../lib/execution-journal.mjs';
 import { recoverOnce } from '../lib/controller-recovery.mjs';
 
+async function assertPrivateFixtureBytes(directory, forbidden) {
+  const pending = [{ directory, depth: 0 }]; let entries = 0;
+  while (pending.length) {
+    const current = pending.pop(); assert.ok(current.depth <= 16, 'Fixture scan must remain bounded');
+    for (const name of await fs.readdir(current.directory)) {
+      assert.ok(++entries <= 1000, 'Fixture scan must remain bounded');
+      const filename = path.join(current.directory, name), stat = await fs.lstat(filename);
+      assert.equal(stat.isSymbolicLink(), false, 'Privacy fixture must not redirect its scan');
+      if (stat.isDirectory()) pending.push({ directory: filename, depth: current.depth + 1 });
+      else {
+        assert.equal(stat.isFile(), true, 'Every non-directory fixture entry must be inspected');
+        assert.equal((await fs.readFile(filename)).includes(Buffer.from(forbidden)), false);
+      }
+    }
+  }
+}
+
 const uuid = n => { const hex = n.toString(16).padStart(32, '0'); return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`; };
 const COMPANY = uuid(1), PROJECT = uuid(4), AGENT = uuid(5), WORKSPACE = uuid(6), USER = uuid(7), OWNER = uuid(8);
 const NOW = '2030-01-02T00:00:00.000Z';
@@ -229,7 +246,7 @@ test('synthetic quota failure defers the entire company without persisting raw s
   assert.equal(restarted.status, 'recovering');
   assert.equal(f.calls.length, calls, 'A restart must respect durable company cooldown without another subprocess');
   for (const record of [first, second]) assert.equal(context.journal.getExecution(record.executionId).state, 'running');
-  for (const name of await fs.readdir(context.journal.directory)) assert.equal((await fs.readFile(path.join(context.journal.directory, name))).includes(Buffer.from(secret)), false);
+  await assertPrivateFixtureBytes(context.journal.directory, secret);
   assert.equal(JSON.stringify(result).includes(secret), false);
 });
 
