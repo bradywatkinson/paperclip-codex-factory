@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { ExecutionJournal } from '../lib/execution-journal.mjs';
-import { parseCloudPage, reconcileOnce, validateReconcileConfig } from '../lib/cloud-reconcile.mjs';
+import { buildReviewInteraction, parseCloudPage, reconcileOnce, validateReconcileConfig } from '../lib/cloud-reconcile.mjs';
 
 const COMPANY = '11111111-1111-4111-8111-111111111111';
 const ISSUE = '22222222-2222-4222-8222-222222222222';
@@ -40,7 +40,8 @@ async function setup(t, patch = {}) {
   return { directory, journal, config, executionId: journal.get(ISSUE).executionId };
 }
 function fixture(options = {}) {
-  const calls = [], comments = options.comments ?? [], pages = options.pages ?? [{ tasks: [cloudTask(options.task)], cursor: null }];
+  const calls = [], interactions = options.interactions ?? [], pages = options.pages ?? [{ tasks: [cloudTask(options.task)], cursor: null }];
+  const issueState = issue(options.issue);
   let page = 0;
   const run = async (command, args, commandOptions) => {
     calls.push({ command, args, options: commandOptions });
@@ -50,21 +51,32 @@ function fixture(options = {}) {
     if (args[0] === 'cloud' && args[1] === 'list') return options.cloudResult ?? done(pages[page++] ?? { tasks: [], cursor: null });
     if (args[0] === 'whoami') return done({ userId: USER, companyIds: [COMPANY], isInstanceAdmin: false, source: 'board_key' });
     if (args[0] === 'run' && args[1] === 'get') return done({ id: RUN, companyId: COMPANY, agentId: AGENT, status: 'succeeded', contextSnapshot: { issueId: ISSUE }, ...options.heartbeat });
-    if (args[0] === 'issue' && args[1] === 'get') return done(issue(options.issue));
+    if (args[0] === 'issue' && args[1] === 'get') return done(issueState);
     if (args[0] === 'project' && args[1] === 'get') return done(project(options.project));
-    if (args[0] === 'issue' && args[1] === 'comments') return done(comments);
-    if (args[0] === 'issue' && args[1] === 'comment') {
-      const body = args[args.indexOf('--body') + 1];
-      const saved = { id: '88888888-8888-4888-8888-888888888888', issueId: ISSUE, authorUserId: USER, body, createdAt: NOW };
-      if (options.saveComment !== false) comments.unshift(saved);
-      return options.commentResult ?? done(saved);
+    if (args[0] === 'issue' && args[1] === 'interactions') return done(interactions);
+    if (args[0] === 'issue' && args[1] === 'interaction:create') {
+      const payload = JSON.parse(args[args.indexOf('--payload-json') + 1]);
+      if (options.closeBeforeNotification) {
+        issueState.status = 'done';
+        return { ...RESULT, code: 1, stderr: 'Cannot create an interaction on a closed issue' };
+      }
+      const saved = { id: '88888888-8888-4888-8888-888888888888', companyId: COMPANY, issueId: ISSUE, createdByUserId: USER, createdByAgentId: null, status: 'pending', ...payload, createdAt: NOW };
+      if (options.saveNotification !== false) interactions.unshift(saved);
+      return options.notificationResult ?? done(saved);
+    }
+    if (args[0] === 'issue' && ['comment', 'update'].includes(args[1])) {
+      // Paperclip 2026.1023 treats plain Board comments as a request to resume,
+      // including PATCH issue --comment. Omitting --status is not status safe.
+      const bodyFlag = args[1] === 'comment' ? '--body' : '--comment';
+      if (args.includes(bodyFlag) && ['blocked', 'done', 'cancelled'].includes(issueState.status)) issueState.status = 'todo';
+      return done(issueState);
     }
     throw new Error('Unexpected fixture command: ' + JSON.stringify(args));
   };
-  return { calls, comments, run };
+  return { calls, interactions, issueState, run };
 }
 const cloudCalls = f => f.calls.filter(c => c.args[0] === 'cloud');
-const commentCalls = f => f.calls.filter(c => c.args[0] === 'issue' && c.args[1] === 'comment');
+const notificationCalls = f => f.calls.filter(c => c.args[0] === 'issue' && c.args[1] === 'interaction:create');
 function invoke(context, f, at = NOW) {
   let clock = Date.parse(at);
   return reconcileOnce({ config: context.config, journal: context.journal, run: f.run, now: () => new Date(clock).toISOString(), sleep: async ms => { clock += ms; }, env: { HOME: '/fixture/home', PATH: '/fixture/bin', PAPERCLIP_API_KEY: 'SECRET_DO_NOT_PROPAGATE', PAPERCLIP_RUN_ID: RUN } });
@@ -81,6 +93,19 @@ test('Cloud pages accept nullable environments and reject malformed task identit
   for (const value of ['not json', '{}', JSON.stringify({ tasks: {}, cursor: null }), JSON.stringify({ tasks: [cloudTask({ id: '../task' })], cursor: null })]) assert.throws(() => parseCloudPage(value));
 });
 
+test('review interaction is human-only, stable, and has no execution continuation', () => {
+  const execution = { ...IDENTITY, ...RECEIPT, executionId: ISSUE };
+  const notification = buildReviewInteraction(execution, 'Review evidence');
+  assert.equal(notification.idempotencyKey, 'factory-cloud-review:' + ISSUE);
+  assert.equal(notification.kind, 'request_confirmation');
+  assert.equal(notification.continuationPolicy, 'none');
+  assert.equal(notification.resolverPolicy, 'human_only');
+  assert.deepEqual(notification.payload.target, { type: 'custom', key: notification.idempotencyKey, href: RECEIPT.taskUrl, label: 'Cloud task' });
+  assert.equal(notification.payload.detailsMarkdown, 'Review evidence');
+  for (const field of ['addresseeAgentId', 'sourceRunId', 'status']) assert.equal(notification[field], undefined);
+  assert.deepEqual(buildReviewInteraction(execution, 'Review evidence'), notification);
+});
+
 test('ready Cloud execution sends one review notification and preserves the Paperclip status', async t => {
   const context = await setup(t), f = fixture();
   const result = await invoke(context, f);
@@ -88,13 +113,18 @@ test('ready Cloud execution sends one review notification and preserves the Pape
   assert.equal(result.notified, 1);
   assert.equal(context.journal.get(ISSUE).state, 'succeeded');
   assert.equal(context.journal.handoffs(context.executionId)[0].state, 'delivered');
-  assert.equal(commentCalls(f).length, 1);
-  assert.match(f.comments[0].body, /review/i);
-  assert.ok(f.comments[0].body.includes(RECEIPT.taskUrl));
-  assert.equal(f.calls.some(c => c.args[0] === 'issue' && c.args[1] === 'update'), false);
+  assert.equal(notificationCalls(f).length, 1);
+  assert.match(f.interactions[0].payload.detailsMarkdown, /review/i);
+  assert.ok(f.interactions[0].payload.detailsMarkdown.includes(RECEIPT.taskUrl));
+  assert.equal(f.calls.some(c => c.args[0] === 'issue' && ['update', 'comment'].includes(c.args[1])), false);
+  assert.equal(f.issueState.status, 'blocked', 'A Board comment implicitly resumes blocked work');
+  assert.equal(f.interactions[0].continuationPolicy, 'none');
+  assert.equal(f.interactions[0].resolverPolicy, 'human_only');
+  assert.equal(f.interactions[0].addresseeAgentId, undefined);
+  assert.equal(f.interactions[0].sourceRunId, undefined);
   assert.equal(f.calls.some(c => c.args.includes('exec')), false);
   await invoke(context, f, '2030-01-02T00:10:00.000Z');
-  assert.equal(commentCalls(f).length, 1);
+  assert.equal(notificationCalls(f).length, 1);
   for (const call of f.calls) {
     assert.equal(call.options.env.PAPERCLIP_API_KEY, undefined);
     assert.equal(call.options.env.PAPERCLIP_RUN_ID, undefined);
@@ -105,7 +135,7 @@ test('pending tasks stay pollable without a Paperclip notification', async t => 
   const context = await setup(t), f = fixture({ task: { status: 'pending' } });
   await invoke(context, f);
   assert.equal(context.journal.get(ISSUE).state, 'running');
-  assert.equal(commentCalls(f).length, 0);
+  assert.equal(notificationCalls(f).length, 0);
   assert.equal(context.journal.handoffs(context.executionId).length, 0);
   assert.equal(context.journal.observations(context.executionId)[0].status, 'pending');
 });
@@ -114,7 +144,7 @@ test('unknown provider status never becomes failed, cancelled, or succeeded', as
   const context = await setup(t), f = fixture({ task: { status: 'cancelled' } });
   await invoke(context, f);
   assert.ok(['running', 'unknown'].includes(context.journal.get(ISSUE).state));
-  assert.equal(commentCalls(f).length, 0);
+  assert.equal(notificationCalls(f).length, 0);
   assert.ok(context.journal.observations(context.executionId)[0].errorCode);
 });
 
@@ -137,7 +167,7 @@ test('bounded pagination finds a later receipt and sends its review notification
   await invoke(context, f);
   assert.equal(cloudCalls(f).length, 2);
   assert.ok(cloudCalls(f)[1].args.includes('second-page'));
-  assert.equal(commentCalls(f).length, 1);
+  assert.equal(notificationCalls(f).length, 1);
 });
 
 test('pagination exhaustion leaves missing tasks unresolved', async t => {
@@ -145,7 +175,7 @@ test('pagination exhaustion leaves missing tasks unresolved', async t => {
   await invoke(context, f);
   assert.equal(cloudCalls(f).length, 2);
   assert.ok(['running', 'unknown'].includes(context.journal.get(ISSUE).state));
-  assert.equal(commentCalls(f).length, 0);
+  assert.equal(notificationCalls(f).length, 0);
 });
 
 test('repeated cursors terminate bounded polling without guessing a missing task outcome', async t => {
@@ -160,7 +190,7 @@ for (const task of [{ url: 'https://evil.example/' }, { environment_id: 'b'.repe
   const context = await setup(t), f = fixture({ task });
   await invoke(context, f);
   assert.equal(context.journal.get(ISSUE).state, 'running');
-  assert.equal(commentCalls(f).length, 0);
+  assert.equal(notificationCalls(f).length, 0);
   assert.equal(context.journal.observations(context.executionId)[0].status, null);
 });
 
@@ -186,7 +216,7 @@ test('a provider response arriving after its poll lease cannot finish execution 
   assert.equal(result.unresolved, 1);
   assert.equal(context.journal.get(ISSUE).state, 'running');
   assert.equal(context.journal.observations(context.executionId).length, 0);
-  assert.equal(commentCalls(f).length, 0);
+  assert.equal(notificationCalls(f).length, 0);
 });
 
 test('shutdown during a command prevents every subsequent subprocess and notification', async t => {
@@ -201,7 +231,7 @@ test('shutdown during a command prevents every subsequent subprocess and notific
     };
     await reconcileOnce({ config: context.config, journal: context.journal, run, now: () => new Date(clock).toISOString(), sleep: async ms => { clock += ms; }, shouldStop: () => stopped, env: {} });
     assert.equal(stopped, true);
-    assert.equal(commentCalls(f).length, 0);
+    assert.equal(notificationCalls(f).length, 0);
     assert.equal(f.calls.at(-1).args[0], stopAt);
   }
 });
@@ -228,7 +258,7 @@ test('provider rate contention beyond the poll lease records a deferred outcome 
 for (const status of ['done', 'cancelled']) test('human ' + status + ' status suppresses a ready notification', async t => {
   const context = await setup(t), f = fixture({ issue: { status } });
   const result = await invoke(context, f);
-  assert.equal(commentCalls(f).length, 0);
+  assert.equal(notificationCalls(f).length, 0);
   assert.equal(context.journal.get(ISSUE).state, 'succeeded');
   assert.equal(context.journal.handoffs(context.executionId)[0].state, 'skipped');
   assert.ok(result.skipped > 0);
@@ -237,7 +267,7 @@ for (const status of ['done', 'cancelled']) test('human ' + status + ' status su
 test('changed task scope or assignment suppresses the review notification', async t => {
   const context = await setup(t), f = fixture({ issue: { assigneeAgentId: USER } });
   await invoke(context, f);
-  assert.equal(commentCalls(f).length, 0);
+  assert.equal(notificationCalls(f).length, 0);
   assert.notEqual(context.journal.handoffs(context.executionId)[0].state, 'delivered');
 });
 
@@ -245,36 +275,49 @@ test('changed project repository or branch suppresses the review notification', 
   for (const workspace of [{ repoUrl: 'https://github.com/fixture/different.git' }, { repoRef: 'different' }]) {
     const context = await setup(t), f = fixture({ project: { workspaces: [{ ...project().workspaces[0], ...workspace }] } });
     await invoke(context, f);
-    assert.equal(commentCalls(f).length, 0);
+    assert.equal(notificationCalls(f).length, 0);
     assert.equal(context.journal.handoffs(context.executionId)[0].state, 'skipped');
     assert.equal(context.journal.handoffs(context.executionId)[0].errorCode, 'PAPERCLIP_BINDING_CHANGED');
   }
 });
 
 test('an ambiguous notification write is never automatically retried', async t => {
-  const context = await setup(t), f = fixture({ saveComment: false, commentResult: { ...RESULT, code: null, timedOut: true } });
+  const context = await setup(t), f = fixture({ saveNotification: false, notificationResult: { ...RESULT, code: null, timedOut: true } });
   await invoke(context, f);
-  assert.equal(commentCalls(f).length, 1);
+  assert.equal(notificationCalls(f).length, 1);
   assert.equal(context.journal.handoffs(context.executionId)[0].state, 'unknown');
   await invoke(context, f, '2030-01-02T00:10:00.000Z');
-  assert.equal(commentCalls(f).length, 1);
+  assert.equal(notificationCalls(f).length, 1);
   assert.equal(context.journal.handoffs(context.executionId)[0].state, 'unknown');
 });
 
-test('a read-confirmed notification resolves an ambiguous write without another comment', async t => {
-  const context = await setup(t), f = fixture({ commentResult: { ...RESULT, code: null, timedOut: true } });
+test('a read-confirmed notification resolves an ambiguous write without another interaction', async t => {
+  const context = await setup(t), f = fixture({ notificationResult: { ...RESULT, code: null, timedOut: true } });
   await invoke(context, f);
-  assert.equal(commentCalls(f).length, 1);
+  assert.equal(notificationCalls(f).length, 1);
   await invoke(context, f, '2030-01-02T00:10:00.000Z');
-  assert.equal(commentCalls(f).length, 1);
+  assert.equal(notificationCalls(f).length, 1);
   assert.equal(context.journal.handoffs(context.executionId)[0].state, 'delivered');
 });
 
-test('an identical comment from a different author cannot resolve an ambiguous write', async t => {
-  const context = await setup(t), f = fixture({ commentResult: { ...RESULT, code: null, timedOut: true } });
+test('an identical interaction from a different author cannot resolve an ambiguous write', async t => {
+  const context = await setup(t), f = fixture({ notificationResult: { ...RESULT, code: null, timedOut: true } });
   await invoke(context, f);
-  f.comments[0].authorUserId = AGENT;
+  f.interactions[0].createdByUserId = AGENT;
   await invoke(context, f, '2030-01-02T00:10:00.000Z');
-  assert.equal(commentCalls(f).length, 1);
+  assert.equal(notificationCalls(f).length, 1);
+  assert.equal(context.journal.handoffs(context.executionId)[0].state, 'unknown');
+});
+
+test('a concurrent human completion rejects the interaction without reopening or retrying', async t => {
+  const context = await setup(t), f = fixture({ closeBeforeNotification: true });
+  await invoke(context, f);
+  assert.equal(f.issueState.status, 'done');
+  assert.equal(f.interactions.length, 0);
+  assert.equal(notificationCalls(f).length, 1);
+  assert.equal(context.journal.handoffs(context.executionId)[0].state, 'unknown');
+  await invoke(context, f, '2030-01-02T00:10:00.000Z');
+  assert.equal(notificationCalls(f).length, 1);
+  assert.equal(f.issueState.status, 'done');
   assert.equal(context.journal.handoffs(context.executionId)[0].state, 'unknown');
 });
