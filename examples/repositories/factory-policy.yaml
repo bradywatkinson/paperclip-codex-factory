@@ -1,0 +1,13 @@
+# Keep central policy in private factory storage, outside application repos.
+schemaVersion: 1
+delivery:
+  requiredChecks: [unit-tests]
+  requireIndependentReview: true
+  requireHumanApproval: true
+  autoMerge: false
+  deploy: false
+concurrency:
+  maxGlobalActive: 2
+  maxRepositoryActive: 1
+  maxAttempts: 3
+maxCommandTimeoutMs: 3600000

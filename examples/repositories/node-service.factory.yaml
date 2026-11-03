@@ -1,0 +1,19 @@
+# Factory convention v1, not a native Paperclip file. Illustrative IDs only.
+schemaVersion: 1
+repository: example/node-service
+defaultBranch: main
+cloud:
+  environmentId: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+commands:
+  test:
+    argv: [node, --test]
+    timeoutMs: 120000
+delivery:
+  requiredChecks: [unit-tests]
+  requireIndependentReview: true
+  requireHumanApproval: true
+  autoMerge: false
+  deploy: false
+concurrency:
+  maxActive: 1
+  maxAttempts: 2

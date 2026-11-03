@@ -1,0 +1,10 @@
+{
+  "name": "paperclip-codex-factory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "factory": "scripts/factory.mjs" },
+  "engines": { "node": ">=24.15.0" },
+  "scripts": { "test": "node --test tests/*.test.mjs", "factory": "node scripts/factory.mjs" },
+  "dependencies": { "yaml": "2.9.1" }
+}
