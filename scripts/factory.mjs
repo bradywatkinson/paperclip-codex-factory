@@ -10,6 +10,7 @@ import { buildOnboardingPlan, bootstrapRepository, inspectRepository } from '../
 const HELP = `Usage:
   factory scheduler --help
   factory controller --help
+  factory controller service --help
   factory delivery inspect --help
   factory repo validate [--config .factory.yaml] [--policy POLICY] [--online --company UUID] [--json]
   factory repo add [--config .factory.yaml] [--policy POLICY] [--registry DIRECTORY] [--json]
@@ -71,6 +72,10 @@ export async function runFactoryCli(args, { stdout = value => process.stdout.wri
     if (args[0] === 'scheduler') {
       const { runSchedulerCli } = await import('./factory-scheduler.mjs');
       return await runSchedulerCli(args.slice(1), { stdout, stderr, home });
+    }
+    if (args[0] === 'controller' && args[1] === 'service') {
+      const { runControllerServiceCli } = await import('./controller-service.mjs');
+      return await runControllerServiceCli(args.slice(2), { stdout, stderr, home, ...(run ? { run } : {}) });
     }
     if (args[0] === 'controller') {
       const { runFactoryControllerCli } = await import('./factory-controller.mjs');
