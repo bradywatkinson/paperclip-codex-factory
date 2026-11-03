@@ -1,0 +1,16 @@
+{
+  "role": "implementer",
+  "templateVersion": 1,
+  "repository": "example/node-service",
+  "branch": "main",
+  "baseSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "task": {
+    "id": "a11a1111-1111-4111-8111-111111111111",
+    "title": "Reject malformed pagination limits",
+    "description": "Update parseLimit so empty text uses the default, positive whole numbers are accepted, and fractional, negative and nonnumeric text is rejected. Preserve the maximum of 100. Add focused parser tests and return the patch with test evidence."
+  },
+  "commands": { "test": { "argv": ["node", "--test", "test/parse-limit.test.mjs"], "timeoutMs": 120000 } },
+  "delivery": { "requiredChecks": ["unit-tests"], "requireIndependentReview": true, "requireHumanApproval": true, "autoMerge": false, "deploy": false },
+  "attempt": 1,
+  "maxAttempts": 2
+}

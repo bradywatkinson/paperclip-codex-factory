@@ -49,6 +49,15 @@ test('central required checks cannot be removed and repository checks may streng
   assert.deepEqual(validateRepositoryConfig(input(), { policy }).delivery.requiredChecks, ['security', 'unit-tests']);
 });
 
+test('resolved required-check limits reject oversized unions before registry revalidation', () => {
+  const policy = { delivery: { requiredChecks: Array.from({ length: 30 }, (_, i) => `central-${i}`) } };
+  const oversized = { ...input(), delivery: { requiredChecks: Array.from({ length: 30 }, (_, i) => `repo-${i}`) } };
+  assert.throws(() => validateRepositoryConfig(oversized, { policy }), failure('INVALID_REPOSITORY_CONFIG', 'delivery.requiredChecks'));
+  const accepted = validateRepositoryConfig({ ...input(), delivery: { requiredChecks: Array.from({ length: 20 }, (_, i) => `repo-${i}`) } }, { policy });
+  assert.equal(accepted.delivery.requiredChecks.length, 50);
+  assert.deepEqual(validateRepositoryConfig(accepted, { policy }), accepted);
+});
+
 test('unsafe gates reject explicit overrides in repositories and central policy', () => {
   for (const delivery of [{ autoMerge: true }, { deploy: true }, { requireHumanApproval: false }, { requireIndependentReview: false }, { autoMerge: 'false' }]) {
     assert.throws(() => validateRepositoryConfig({ ...input(), delivery }), failure('POLICY_VIOLATION'));
