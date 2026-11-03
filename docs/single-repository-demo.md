@@ -1,6 +1,6 @@
 # Single-repository Cloud delivery demo
 
-Issue [#7](https://github.com/bradywatkinson/paperclip-codex-factory/issues/7) needs live evidence of a Paperclip task producing a reviewed coding result after a local interruption. The first tracer uses a small documentation-only patch to verify delivery safely. It does **not** close the coding-change acceptance criterion or establish application behavior. A subsequent approved coding task needs its own change and test evidence.
+Issue [#7](https://github.com/bradywatkinson/paperclip-codex-factory/issues/7) needs live evidence of a Paperclip task producing a reviewed coding result after a local interruption. The proposed coding slice fixes Story Keeper [#3465](https://github.com/bradywatkinson/story-keeper/issues/3465): reserve the `all` slug for new lists and add focused tests. No production rows or legacy URLs are changed. The earlier documentation-only prompt is retained as an unused tracer example; it is not the planned #7 submission.
 
 This is a procedure, not a successful live verification record. The new Cloud submission, interruption, patch retrieval, and result review remain pending until separately recorded. Historical fixture tests and earlier read-only Cloud probes do not satisfy these checks.
 
@@ -12,7 +12,7 @@ Use the existing [process dispatcher setup](cloud-dispatch.md#agent-configuratio
 
 Use the same company journal for dispatch and the [recovery controller](controller-recovery.md). There is no assumed preexisting controller config: copy [the reconciliation example](../examples/cloud-reconcile.json) to private controller storage and replace its company UUID, absolute `stateDir`, and executable paths. Keep configuration outside application repositories and credentials in the CLIs' normal private stores. Follow the journal backup procedure before opening an older journal.
 
-Copy [the canonical task](../examples/single-repository-demo-task.md) to a private task file and replace `<EXPECTED_BASE_SHA>` with the approved full SHA. Inspect the final file before assignment. The remote task stops on a base mismatch or an existing output file; it does not choose a replacement base or overwrite prior evidence.
+Copy [the coding task](../examples/single-repository-coding-task.md) to a private task file and replace `<EXPECTED_BASE_SHA>` with the approved full SHA. Inspect the final file before assignment. The remote task stops on a base mismatch, dirty checkout, or an already-fixed defect; it does not choose a replacement base or manufacture a change.
 
 Set these placeholders in a normal shell, from the factory repository root:
 
@@ -44,7 +44,7 @@ Only after the concrete remote task is approved, create one assigned task:
 ```sh
 ./scripts/paperclip issue create --company-id "$DEMO_COMPANY" \
   --project-id "$DEMO_PROJECT" --standalone \
-  --title 'Factory Cloud documentation delivery tracer' \
+  --title 'Factory Cloud coding demo: reserve the All list slug' \
   --description "$(cat "$DEMO_TASK")" --status todo \
   --assignee-agent-id "$DEMO_AGENT" \
   --api-base http://127.0.0.1:8100 --json
@@ -101,12 +101,12 @@ DEMO_CLOUD_TASK='<accepted task_e_ ID>'
   > "$DEMO_EVIDENCE/cloud.patch"
 ```
 
-Record each command's exit code and inspect output before publication. Match exact task IDs and sanitized timestamps; do not match by title. A missing item may be outside this page and is not proof of failure. The pinned CLI's empty-diff error does not prove the task is still running. Review the patch without applying it, and verify that it changes only the intended file with the exact expected content. Do not run `cloud apply` in the working checkout.
+Record each command's exit code and inspect output before publication. Match exact task IDs and sanitized timestamps; do not match by title. A missing item may be outside this page and is not proof of failure. The pinned CLI's empty-diff error does not prove the task is still running. Review the patch without applying it, and verify that it changes only the two approved files with the requested behavior and regression coverage. Do not run `cloud apply` in the working checkout.
 
 Open the receipt's `https://chatgpt.com/remote/<taskId>` navigation URL manually. Capture the final response, initial/final commit, changed-file list, focused check output, and PR indicators with provenance labeled user UI evidence. Independently compare the reported initial commit with the approved immutable SHA. The factory cannot retrieve final assistant output or PR metadata through the pinned CLI. A `work` branch label does not verify base ancestry.
 
-There is no CLI PR-creation command. This tracer requests no push or PR; its documented fallback is the retrieved patch, Cloud task link, verified base identity, and captured test evidence. PR publication and a real application coding task remain later approved steps. The focused marker-file check is not an application test suite.
+There is no CLI PR-creation command. This coding task requests no push or PR; its documented fallback is the retrieved patch, Cloud task link, verified base identity, and captured test evidence. PR publication remains a separate approved step. Require a nonzero executed test count from the focused collection suite; the wrapper's zero-exit behavior with no matching tests is insufficient. This does not verify the full application suite.
 
 READY means remote completion requiring review. Resolving the review card does not complete the Paperclip task. Preserve human task status and make any completion decision explicitly after reviewing evidence.
 
-Publish a sanitized evidence record linking the Paperclip issue/run, original receipt, before/after journal identities and observations, stop/start interval, Cloud task, patch hash, reviewed changed paths, test outcomes, and unresolved checks. Distinguish CLI observations, journal records, and user-supplied UI evidence. Do not mark #7 complete from this documentation tracer alone.
+Publish a sanitized evidence record linking the Paperclip issue/run, original receipt, before/after journal identities and observations, stop/start interval, Cloud task, patch hash, reviewed changed paths, test outcomes, and unresolved checks. Distinguish CLI observations, journal records, and user-supplied UI evidence. Mark #7 complete only after its entire live lifecycle and interruption criteria have been verified.

@@ -24,3 +24,9 @@ Observed from branch `issue-7-cloud-execution-demo`, based on merged commit `ffa
 No new #7 task has been submitted. This preflight provides no new coding patch, acceptance-test result, live controller-interruption proof, UI inspection, or PR-delivery evidence. Existing fixture tests and earlier read-only Cloud tasks do not satisfy those checks for this demo.
 
 The documentation slice does not close [issue #7](https://github.com/bradywatkinson/paperclip-codex-factory/issues/7). A separately authorized coding task must still demonstrate the end-to-end lifecycle, auditable output, recovery of the same Cloud identity after local interruption, and the documented PR or patch fallback.
+
+## Coding task proposed — 2026-11-03
+
+The live plan now uses the [new-list-only fix for Story Keeper #3465](https://github.com/bradywatkinson/story-keeper/issues/3465), with focused regression tests. The [coding prompt](../../examples/single-repository-coding-task.md) limits edits to `convex/model/collections.ts` and `convex/collections.test.ts`; no existing-row migration or production access is requested. Read-only inspection of Story Keeper main at `637830478604ca8abeb75065d7940c2ffacdb4c9` found the defect still present, and prerequisite PR #3464 is merged. Recheck and pin the approved base before submission.
+
+The earlier documentation-only prompt has not been submitted. Approval for the real coding task is pending; no new Cloud ID, test result, patch, or live interruption is claimed.

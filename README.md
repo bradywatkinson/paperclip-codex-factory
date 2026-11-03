@@ -41,7 +41,7 @@ The wrapper defaults to `PORT=8100`, `PAPERCLIP_HOME=$HOME/.paperclip` and `PAPE
 
 ## Verification status
 
-Paperclip `2026.1023.0` is installed and running as the enabled macOS LaunchAgent at `http://127.0.0.1:8100`. Health and loopback binding pass; `doctor` passed 12 checks, and the initial logical database backup passed integrity verification. First-owner account setup, visual coordination workflows, full restore, and logout/login recovery remain pending. See [dated evidence](docs/evidence/2026-10-31-bootstrap.md) and [the smoke-test checklist](docs/smoke-test.md#evidence).
+Paperclip `2026.1023.0` is installed and running as the enabled macOS LaunchAgent at `http://127.0.0.1:8100`. Health and loopback binding pass; `doctor` passed 12 checks, and the initial logical database backup passed integrity verification. Saved Board authentication works in the [2026-11-03 preflight](docs/evidence/issue-7-cloud-execution-demo.md). Visual coordination workflows, full restore, and logout/login recovery remain pending. See [dated bootstrap evidence](docs/evidence/2026-10-31-bootstrap.md) and [the smoke-test checklist](docs/smoke-test.md#evidence).
 
 Issue: [#1 — Bootstrap Paperclip local control plane](https://github.com/bradywatkinson/paperclip-codex-factory/issues/1).
 
@@ -97,7 +97,7 @@ The same private configuration supports a consecutive polling-error limit (defau
 
 ## Single-repository demo
 
-Issue [#7](https://github.com/bradywatkinson/paperclip-codex-factory/issues/7) begins with a documentation-only Cloud delivery tracer. See [the reproducible procedure](docs/single-repository-demo.md), [task prompt](examples/single-repository-demo-task.md), and [preflight evidence](docs/evidence/issue-7-cloud-execution-demo.md). Live submission requires explicit approval. The tracer does not establish the issue's coding-change acceptance criterion; live patch delivery and controller interruption remain unverified.
+Issue [#7](https://github.com/bradywatkinson/paperclip-codex-factory/issues/7) proposes a useful coding change with focused tests in Story Keeper. See [the reproducible procedure](docs/single-repository-demo.md), [coding task prompt](examples/single-repository-coding-task.md), and [preflight evidence](docs/evidence/issue-7-cloud-execution-demo.md). Live submission requires explicit approval; patch delivery and live controller interruption remain unverified.
 
 ## Upstream references
 
