@@ -8,6 +8,9 @@ import { RepositoryRegistry, RegistryError, configurationHash } from '../lib/rep
 import { buildOnboardingPlan, bootstrapRepository, inspectRepository } from '../lib/repository-onboarding.mjs';
 
 const HELP = `Usage:
+  factory scheduler --help
+  factory controller --help
+  factory delivery inspect --help
   factory repo validate [--config .factory.yaml] [--policy POLICY] [--online --company UUID] [--json]
   factory repo add [--config .factory.yaml] [--policy POLICY] [--registry DIRECTORY] [--json]
   factory repo list [--registry DIRECTORY] [--json]
@@ -65,6 +68,18 @@ export async function runFactoryCli(args, { stdout = value => process.stdout.wri
   let registry;
   const json = args.includes('--json');
   try {
+    if (args[0] === 'scheduler') {
+      const { runSchedulerCli } = await import('./factory-scheduler.mjs');
+      return await runSchedulerCli(args.slice(1), { stdout, stderr, home });
+    }
+    if (args[0] === 'controller') {
+      const { runFactoryControllerCli } = await import('./factory-controller.mjs');
+      return await runFactoryControllerCli(args.slice(1), { stdout, stderr, home, ...(run ? { run } : {}) });
+    }
+    if (args[0] === 'delivery' && args[1] === 'inspect') {
+      const { runDeliveryCli } = await import('./github-delivery.mjs');
+      return await runDeliveryCli(args.slice(2), { stdout, stderr, home, ...(run ? { run } : {}) });
+    }
     const parsed = parse(args);
     if (parsed.help) { stdout(HELP); return 0; }
     const { command, values, repository } = parsed;
