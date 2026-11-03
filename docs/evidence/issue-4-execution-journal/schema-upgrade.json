@@ -1,0 +1,52 @@
+{
+  "observedAt": "2026-11-02T17:57:36.987853+00:00",
+  "companyId": "dc9439c0-a0d6-4233-b81f-2cc3adc2ec0b",
+  "paperclipIssueId": "688630d3-a281-45ab-8707-37e5f3731663",
+  "before": {
+    "schemaVersion": 2,
+    "execution": {
+      "id": "ce51b48d-0f4a-4dce-bdb3-9712ef1043ed",
+      "revision": 0,
+      "state": "running",
+      "cloud_task_id": "task_e_6ae8be3af9888325b7e16a152a0843a8",
+      "created_at": "2026-11-02T16:45:43.789Z",
+      "updated_at": "2026-11-02T16:45:43.789Z",
+      "dispatched_at": "2026-11-02T16:45:48.609Z"
+    },
+    "events": [
+      {
+        "revision": 0,
+        "at": "2026-11-02T16:45:43.789Z"
+      }
+    ],
+    "importedAt": "2026-11-02T17:47:08.305Z",
+    "integrityCheck": "ok"
+  },
+  "after": {
+    "schemaVersion": 3,
+    "execution": {
+      "id": "ce51b48d-0f4a-4dce-bdb3-9712ef1043ed",
+      "revision": 0,
+      "state": "running",
+      "cloud_task_id": "task_e_6ae8be3af9888325b7e16a152a0843a8",
+      "created_at": "2026-11-02T16:45:43.789Z",
+      "updated_at": "2026-11-02T17:47:08.305Z",
+      "dispatched_at": "2026-11-02T16:45:48.609Z"
+    },
+    "events": [
+      {
+        "revision": 0,
+        "at": "2026-11-02T17:47:08.305Z"
+      }
+    ],
+    "importedAt": "2026-11-02T17:47:08.305Z",
+    "integrityCheck": "ok"
+  },
+  "backupDirectory": "/Users/bradyw/.paperclip/instances/factory/data/cloud-dispatch-backups/issue4-schema2-20261102T175736Z",
+  "legacySha256Unchanged": "a7e89d741ee8529969b89002357dddfee0c55d3b1aba21e97e4c74a2d877ce9b",
+  "repeatImportStable": true,
+  "cloudSubmissionPerformed": false,
+  "paperclipTaskStateChanged": false,
+  "processAgentsPaused": true,
+  "rebootOrPowerLossTested": false
+}

@@ -120,6 +120,8 @@ Keep `~/.paperclip` private to this user and store backups in encrypted storage 
 
 Paperclip supports automatic database backups (hourly by default, with 30-day retention); check the actual instance settings. Automatic dumps stay on the same disk and exclude uploads, configuration, and key material. Also keep a full stopped-instance backup on separate encrypted storage.
 
+Paperclip's PostgreSQL logical dump does **not** include the factory's SQLite execution journal. The full stopped-instance copy must retain the entire `data/cloud-dispatch/` tree: each company's database, any `-wal`/`-shm` sidecars, and the compatibility fences. Pause dispatchers and wait for their processes and journal connections to close before copying. For an online journal backup, use the [SQLite backup API](https://nodejs.org/download/release/v24.15.0/docs/api/sqlite.html) rather than copying an open database file alone. See [journal backup and cutover](execution-journal.md#local-inspection-and-cutover).
+
 First pause agents and wait for active work to finish. Create a logical backup while the instance is running:
 
 ```sh
@@ -128,7 +130,7 @@ First pause agents and wait for active work to finish. Create a logical backup w
 ./scripts/paperclip service status --instance factory --json
 ```
 
-Confirm the server and embedded database have stopped before copying. With a fresh destination on your encrypted backup volume:
+Confirm the server, embedded database, and local dispatcher/journal processes have stopped before copying. With a fresh destination on your encrypted backup volume:
 
 ```sh
 umask 077
