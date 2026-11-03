@@ -2,7 +2,7 @@
 
 A reusable, local Paperclip coordination service for an Apple Silicon Mac. The control plane lives outside application repositories; this repository holds its version pins, setup scripts, and operating procedures.
 
-Initial scope: persistent storage, authenticated local UI, backups, and a macOS login service. Application integration, production deployments, and automatic merges are outside this foundation.
+The factory includes repository onboarding, durable Cloud dispatch/recovery, shared admission, GitHub delivery inspection, bounded independent review/QA/repair, narrow MCP tools and a private HTTPS proxy. Live end-to-end acceptance remains incomplete. Production deployment and automatic merge are not provided.
 
 The bootstrap, CLI contract spike, and dispatch bridge were merged through [PR #17](https://github.com/bradywatkinson/paperclip-codex-factory/pull/17). See [the publication record](docs/publication.md) for the initial review history.
 
@@ -99,6 +99,12 @@ The same private configuration supports a consecutive polling-error limit (defau
 
 Issue [#7](https://github.com/bradywatkinson/paperclip-codex-factory/issues/7) proposes a useful coding change with focused tests in Story Keeper. See [the reproducible procedure](docs/single-repository-demo.md), [coding task prompt](examples/single-repository-coding-task.md), and [preflight evidence](docs/evidence/issue-7-cloud-execution-demo.md). Live submission requires explicit approval; patch delivery and live controller interruption remain unverified.
 
+## Implementation and live acceptance
+
+Code commit `5b1d2cb` passed **453/453 Node 24.15.0 tests**, including the native notification-target and notification-details size corrections. The [published d65872b CI run](https://github.com/bradywatkinson/paperclip-codex-factory/actions/runs/41692000251) separately passed **362 Node tests**, Go fixture/race tests and a macOS Apple Silicon proxy cross-build. That hosted head predates the current review/repair work.
+
+Real Story Keeper onboarding, separate reviewer/QA/repair agent provisioning with repeat-ID reuse, and an idle current-code account-controller pass are recorded. No review tasks or model executions were started by provisioning. The MCP stdio probe created/reused unassigned draft `PAP-4` without invoking Cloud. The separate controller plist installed, but native start returned bootstrap error 5; a temporary bounded runner was observed idle while normal-Terminal service verification remains pending. No live #7 coding proof, #9 review batch, phone access or two-repository execution proof is claimed. See [dated evidence](docs/evidence/epic-implementation-2026-11-03.md) and the [full acceptance audit](docs/epic-status.md).
+
 ## Factory operator CLI
 
 The [epic acceptance audit](docs/epic-status.md) tracks remaining live and operational checks. The factory CLI requires the repository dependencies and supported Node runtime:
@@ -109,10 +115,12 @@ FACTORY_NODE="$HOME/.local/share/paperclip-runtime-next/node_modules/node/bin/no
 "$FACTORY_NODE" scripts/factory.mjs repo validate --config examples/repositories/node-service.factory.yaml --json
 "$FACTORY_NODE" scripts/factory.mjs repo --help
 "$FACTORY_NODE" scripts/factory.mjs scheduler --help
+"$FACTORY_NODE" scripts/factory.mjs controller service --help
+"$FACTORY_NODE" scripts/factory.mjs review --help
 "$FACTORY_NODE" scripts/factory.mjs delivery inspect --help
 ```
 
-See [repository configuration and onboarding](docs/repository-onboarding.md). Validation is separate from successful execution; bootstrapping never submits a Cloud job.
+See [repository configuration and onboarding](docs/repository-onboarding.md), [review/repair orchestration](docs/review-controller.md), [controller service operations](docs/controller-service.md), [private remote access](docs/remote-access.md) and [narrow MCP tools](docs/paperclip-mcp.md). Validation is separate from successful execution; bootstrapping never submits a Cloud job. Review batches require an explicit approved delivery and `--approve-dispatch`.
 
 ## Upstream references
 

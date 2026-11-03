@@ -2,9 +2,13 @@
 
 Audited **2026-11-03**, from the current worktree and live GitHub issue descriptions. The objective is the entire operational factory, including delivery, review, multiple repositories, recovery, and private remote access. A passing fixture suite or a configuration file does not establish live operation.
 
-The current open issues are [#1](https://github.com/bradywatkinson/paperclip-codex-factory/issues/1), [#2](https://github.com/bradywatkinson/paperclip-codex-factory/issues/2), and [#7–#16](https://github.com/bradywatkinson/paperclip-codex-factory/issues?q=is%3Aissue+is%3Aopen). The dispatch/journal/reconciliation/recovery work from #3–#6 is the foundation for the remaining work. Configuration, onboarding, role templates and the read-only GitHub delivery inspector now have local test evidence; their live acceptance and the integrated epic remain incomplete.
+The audit covers [#1](https://github.com/bradywatkinson/paperclip-codex-factory/issues/1), [#2](https://github.com/bradywatkinson/paperclip-codex-factory/issues/2), and [#7–#16](https://github.com/bradywatkinson/paperclip-codex-factory/issues?q=is%3Aissue). The dispatch/journal/reconciliation/recovery work from #3–#6 is the foundation. Repository configuration, onboarding, shared scheduling, GitHub delivery, role dispatch, independent review/repair orchestration, a managed controller service, narrow MCP tools and an app-scoped tailnet proxy are implemented. Their live acceptance and the integrated epic remain incomplete.
 
-Evidence terms below: **recorded** means an identified dated artifact supports the stated scope; **in progress** means code or documentation exists without complete acceptance evidence; **missing** means no implementation or required observation was found. At commit `1b08217`, the full core Node **24.15.0** suite passed **344/344 tests**, including scheduler, inventory, controller, delivery artifacts/CLI, MCP protocol, CI-name discovery and fixture child-process restart. `git diff --check` was clean. The login-service work was explicitly excluded. [Dated evidence](evidence/epic-implementation-2026-11-03.md) also records real onboarding, idle controller reconciliation, and MCP draft creation/restart idempotency. No new Cloud coding submission is established.
+**Local checkpoint:** code commit `5b1d2cb` passed **453/453 Node 24.15.0 tests**, including service, MCP, actual dispatcher/SQLite review integration, typed repair provenance, parent-scope guards and persisted review round-robin progress. `git diff --check` was clean. The final run includes both native notification-target and notification-details size corrections. **Hosted checkpoint:** [Factory checks run 41692000251](https://github.com/bradywatkinson/paperclip-codex-factory/actions/runs/41692000251) succeeded for `d65872ba9023c025a5870444d72f0efcb57e5039`: **362 Node tests**, Go fixture/race tests and a macOS Apple Silicon proxy cross-build. That published head predates the current review/repair changes; it does not establish hosted acceptance of all 453 local tests.
+
+**Live scope:** Story Keeper onboarding returned `configured`; an account controller pass and a temporary bounded runner were idle with no new Cloud submissions. The separate controller plist installed, but native start returned bootstrap error 5; login recovery is pending. Real MCP stdio reads and unassigned draft `PAP-4` creation/restart idempotency are recorded. The reviewer/QA/repair agents now provisioned as `configured`, retained the same three IDs on repeat and left the original dispatcher unchanged; a fresh controller pass remained idle with zero review tasks or model executions. No new #7 coding task, live #9 review/repair batch, phone access or two-repository execution proof is established. [Dated evidence](evidence/epic-implementation-2026-11-03.md) separates these observations from fixture results.
+
+Evidence terms below: **recorded** means an identified dated artifact supports the stated scope; **implemented/tested** describes code and local or hosted checks; **missing** identifies required implementation or live evidence still absent.
 
 ## #1 — local foundation
 
@@ -42,22 +46,22 @@ Evidence terms below: **recorded** means an identified dated artifact supports t
 | Acceptance requirement | Evidence and remaining work |
 | --- | --- |
 | Associate task with repo, branch, PR and commits | `github-delivery.mjs` produces an execution/Cloud/repo/branch/base/head/PR association. Tested CLI loads actual registry/journal records and persists private immutable observations and patches. No live coding association demonstrated. |
-| Retrieve checks/CI; show links and actionable failures in Paperclip | Inspector reads SHA-scoped check runs and commit statuses with bounded pagination and sanitized links. Paperclip delivery projection is still being integrated. Onboarding check-name presence remains a weaker, separate observation. |
+| Retrieve checks/CI; show links and actionable failures in Paperclip | Inspector reads SHA-scoped check runs and commit statuses with bounded pagination and sanitized links. The review controller consumes these observations and can project gated findings/approval requests through native child tasks and interactions. This path is fixture-tested; live Paperclip delivery projection remains unverified. Onboarding check-name presence is a weaker, separate observation. |
 | Verify PR provenance against expected repo and task | Locally tested: exact complete Cloud/GitHub patch match, requested repo/branch/base/head, ancestry, metadata completeness and final PR re-read. Changed head, mismatched patches, forks and incomplete observations fail closed. No live PR proof yet. |
 | Support Cloud-created PRs and safe unsupported-CLI fallback | Inspector accepts an explicit same-repo PR and provides a patch fallback when none is supplied; fallback expressly leaves base/head/CI unverified. It does not create PRs or infer them by title. Live delivery missing. |
-| No auto-merge; explicit human approval | Inspector uses read-only commands and never sets human approval eligibility. Dispatcher/roles forbid merge/deploy. Full pipeline must retain these invariants. |
-| Success/failure/missing-PR integration tests | Included in the 314-test checkpoint, with CI pending/failure/missing/unknown, provenance, pagination, crash-safe artifact publication and actual CLI/registry/journal fixtures. Live cases and Paperclip projection remain unverified. |
+| No auto-merge; explicit human approval | Inspector uses read-only commands and never sets human approval eligibility. Dispatcher/roles forbid merge/deploy; the review controller requests a human-only confirmation and performs no merge/deploy operation. Live acceptance remains pending. |
+| Success/failure/missing-PR integration tests | Included in the local checkpoint, with CI pending/failure/missing/unknown, initial full-patch and repair-delta provenance, pagination, crash-safe artifact publication and actual CLI/registry/journal fixtures. Live cases and Paperclip projection remain unverified. |
 
-## #9 — independent review and bounded repair
+## #9 — independent review and bounded repair (implemented/tested; live batch pending)
 
 | Acceptance requirement | Evidence and remaining work |
 | --- | --- |
-| Independent Cloud review with criteria, diff and CI context | Role renderer supports immutable PR/CI/task context. Actual independent reviewer dispatch and immutable diff attachment remain missing. |
-| Structured findings linked to PR and follow-up task | Tested role result schema carries task/repo/base/head and findings. Durable finding persistence and real follow-up task routing remain missing. |
-| Distinguish blocking, nonblocking and infrastructure outcomes | Implemented/tested role classifications reject a clean result containing blocking/infrastructure findings. Actual reviewer observations still missing. |
-| Maximum attempts; prevent duplicate feedback loops | Pure routing helper has tested attempt/handoff ceilings and terminal confirmation before repair. Durable review/repair counters, deduplication and dispatch enforcement remain missing. |
-| Passing CI and independent review before human approval queue | Helper requires separate exact-head tests/CI/independent-review observations before recommending human approval; agent reports are always unverified. Trusted adapter integration and live gate proof missing. Existing READY card remains informational. |
-| Clean-review, required-fix and exhausted-retry tests | Local role-result/routing cases are included in the 314-test checkpoint. Full review/repair-controller integration tests remain missing. |
+| Independent Cloud review with criteria, diff and CI context | Private role configs select reviewer/QA/repair agents. The wrapper verifies the actual task/run, approved activation, original criteria and immutable checkout, then binds the real journal execution before admission. Reviewer receives the complete stored patch on its verified base; QA requires the published exact head. Local integration passes. Real provisioning/repeat verification returned `configured` for three separate agents, with the source agent unchanged; no live role Cloud task is claimed. |
+| Structured findings linked to PR and follow-up task | Strict known-task Cloud diff parsing accepts only the exact execution evidence file and full source bindings. SQLite persists reports, native child-task IDs, workspaces, execution/Cloud IDs and handoffs. New assigned child creation is fenced before the write and recovers by exact payload/parent/actor reads. Live routing remains pending. |
+| Distinguish blocking, nonblocking and infrastructure outcomes | Tested classifications reject clean reports containing blocking/infrastructure findings. Missing or malformed evidence becomes attention, never a passing gate. |
+| Maximum attempts; prevent duplicate feedback loops | Durable repair/handoff ceilings, create/wake intents, sticky unknown outcomes and persisted bounded round-robin collection are implemented. Stuck, paused and historical rows do not freeze later approved work. No ambiguous native write is blindly repeated. |
+| Passing CI and independent review before human approval queue | Actual journal-backed delivery is freshly reinspected. The pipeline requires clean review, QA, configured application-test CI names and required checks for the same immutable head before a native human-only confirmation with no continuation. Parent edits or human completion stop advancement. Agent reports remain unverified; live gate proof is pending. Story Keeper's receipt-marker check alone is not application-test evidence. |
+| Clean-review, required-fix and exhausted-retry tests | Local tests cover clean review→QA→fresh CI→confirmation, blocking review→published verified repair delta→fresh full-patch review, exhaustion, native JSON object ordering, parent drift, unknown writes and bounded fair batches. Real repair publication and live #9 acceptance remain pending. See [operator workflow](review-controller.md). |
 
 ## #10 — per-repository configuration (implemented and locally tested)
 
@@ -66,29 +70,29 @@ Evidence terms below: **recorded** means an identified dated artifact supports t
 | Versioned `.factory.yaml`: repo/environment/branch, test/lint/build, gates, limits | Implemented in `repository-config.mjs` and [schema/onboarding guide](repository-onboarding.md); validated through local parser/CLI/dispatcher tests. |
 | Useful errors and safe no-merge/no-deploy defaults | Tested field-specific errors, bounded YAML input and fixed safe delivery gates. |
 | Secret references only | Tested `secretRefs` accepts environment-name references and rejects value fields. Do not place values in tracked command arguments. References are retained, not resolved/forwarded to execution. |
-| Repo overrides cannot weaken central policy | Tested required-check union and concurrency/retry/timeout ceilings; registry persists central policy and rejects silent replacement. Runtime global scheduling remains a separate gate. |
+| Repo overrides cannot weaken central policy | Tested required-check union and concurrency/retry/timeout ceilings; registry persists central policy and rejects silent replacement. The dispatcher enforces shared account/repository admission in addition to these configuration ceilings. |
 | Two examples and invalid/migration tests | Two distinct illustrative examples load; malformed YAML/unknown fields/unsafe refs/unsupported versions and migrations are tested. Unknown versions require explicit migration. |
 | Explicit factory convention, not native Paperclip | Stated in examples, module and guide. |
 
-## #11 — onboarding CLI (implemented and fixture-tested; live proof pending)
+## #11 — onboarding CLI (live setup recorded; coding proof pending)
 
 | Acceptance requirement | Evidence and remaining work |
 | --- | --- |
 | Add/validate/bootstrap commands or equivalent | Implemented/tested plus list/status. Real Story Keeper registration and bootstrap returned `configured`, followed by a successful idle controller pass. Coding execution remains unverified. |
-| Validate GitHub access, Cloud mapping, config and required CI | Tested checks inspect dispatcher availability, versions, repo/branch, check-name presence, ChatGPT auth, filtered Cloud task label and active company. Empty/unconfirmed mapping fails closed. Live verification pending; future CI acceptance is separate. |
+| Validate GitHub access, Cloud mapping, config and required CI | Tested checks inspect dispatcher availability, versions, repo/branch, check-name presence, ChatGPT auth, filtered Cloud task label and active company. Empty/unconfirmed mapping fails closed. Live Story Keeper validation and configured bootstrap are recorded, including PR-head discovery of the `receipt` name. This proves mapping/check-name presence, not actual application-test execution or future CI acceptance. |
 | Idempotent projects and agents | Tested SQLite intent/CAS and exact ownership markers. Live provisioning retained original IDs after a verification stop; repeating bootstrap reused the same project/workspace/agent and returned `configured`. |
 | Readable status/corrections and JSON | Local CLI tests cover normalized status and actionable JSON; `operationalVerified` remains false. |
-| Dry-run and permission/missing-environment integration tests | Included in the 314-test checkpoint: no-write dry-run, permission failures, missing/unrelated environment, missing CI and unchanged private configuration. No new real Cloud job or bootstrap was exercised. |
+| Dry-run and permission/missing-environment integration tests | Included in the local checkpoint: no-write dry-run, permission failures, missing/unrelated environment, missing CI and unchanged private configuration. Real bootstrap and same-ID repeat are recorded separately; no new Cloud coding job was exercised. |
 
 ## #12 — reusable roles and workflow
 
 | Acceptance requirement | Evidence and remaining work |
 | --- | --- |
-| Versioned lead, implementer, independent reviewer and QA templates | Implemented in [roles/v1](../roles/README.md), with the implementer consumed by newly registered code-change dispatchers. Legacy generic/read-only behavior is preserved. Other live role dispatch remains future work. |
-| Decomposition, handoff, PR-output and acceptance-evidence contracts | Tested ordered lead plan, changed paths, structured findings and QA criterion/evidence references. Runtime pipeline integration remains incomplete. |
+| Versioned lead, implementer, independent reviewer and QA templates | Implemented in [roles/v1](../roles/README.md), with the implementer consumed by newly registered code-change dispatchers. Legacy generic/read-only behavior is preserved. Private reviewer/QA/repair dispatch is integrated with the account queue. Three real role agents are configured and repeat-bootstrap IDs are stable; live role Cloud dispatch remains pending. |
+| Decomposition, handoff, PR-output and acceptance-evidence contracts | Tested ordered lead plan, changed paths, structured findings and QA criterion/evidence references. The durable review controller consumes these contracts, creates bounded new child tasks and collects exact execution artifacts; local integration passes, live team acceptance is pending. |
 | Separate roles from repo context and secrets | Bounded renderer injects repo/task/base/head/receipt/PR/CI/argv as JSON under fixed policy; injection and provenance mismatches are tested. No secret values are resolved. |
-| Explicit approvals, retry budgets and escalation | Tested pure helper requires terminal confirmation for bounded repairs, escalates unknown/infrastructure/exhaustion, and leaves human status unchanged. Caller must persist counters and independently enforce dispatch/gates. |
-| Prevent endless agent chatter; two sample-task tests | 16 focused role tests passed, including both different sample tasks through all four roles, bounded handoffs and external-evidence requirements. No live team or durable feedback loop demonstrated. |
+| Explicit approvals, retry budgets and escalation | Tested pure helper requires terminal confirmation for bounded repairs, escalates unknown/infrastructure/exhaustion, and leaves human status unchanged. The review pipeline persists counters, enforces shared dispatch admission and freshly checks delivery gates before requesting a human decision. |
+| Prevent endless agent chatter; two sample-task tests | Role and integrated controller tests cover both sample tasks, bounded handoffs, strict artifact authority and external-evidence requirements. The durable feedback loop is implemented and fixture-tested; no live team is claimed. |
 | Propagate updates without overwriting customizations | [Version-pinned additive overlay procedure](../roles/README.md); tests reject wrong role/version and verify shipped templates remain unchanged. |
 
 ## #13 — unattended reliability
@@ -98,31 +102,31 @@ Evidence terms below: **recorded** means an identified dated artifact supports t
 | Global/per-repo concurrency and fair scheduling | Implemented and tested in actual dispatcher integration across two fixture companies. Persisted admission, fair eligible FIFO, held invalid rows and all-company journal cutover inventory precede submission. Live unattended progression still needs proof. |
 | Usage/auth/version/timeout/transient handling with backoff | Reconciler bounds commands, backoff and polling errors; controller shares provider cooldown across companies. Usage-text recognition remains a heuristic without a live quota fixture. |
 | Queue depth, active IDs, duration/rates and PR outcomes; no unsupported token accounting | Scheduler snapshots provide counts, held attention, bounded IDs/durations and rates without token claims. GitHub observations persist separately; combined PR-outcome metrics remain incomplete. |
-| Operator status, pause/resume and alerts | [Controller/operator CLI](factory-controller.md) implements account/repo pause/resume, explicit CAS limit changes, cooldown and individual held-entry resume. Live service installation and alert delivery remain unverified. |
-| Rate-limit/restart tests and secret-free logs | Included in the 314-test checkpoint: competing-process claims, SIGKILL admission persistence, real loop SIGTERM/restart with one fake wake, cross-company capacity and privacy cases. These do not prove live Mac interruption. |
-| Unknown remote state never causes duplicate dispatch | Journal fences, sticky admitted/unknown slots, terminal-proof release and a durable wake-intent ledger are tested. The future review/repair pipeline must retain the invariant. |
+| Operator status, pause/resume and alerts | [Controller/operator CLI](factory-controller.md) implements account/repo pause/resume, explicit CAS limit changes, cooldown and individual held-entry resume. The separate controller service installed its owned plist/config, but native start is blocked by bootstrap error 5. A temporary bounded runner was observed idle. Actual login startup and alert acceptance remain unverified; see [service evidence](evidence/epic-implementation-2026-11-03.md#controller-service-checkpoint). |
+| Rate-limit/restart tests and secret-free logs | Included in the local checkpoint: competing-process claims, SIGKILL admission persistence, real loop SIGTERM/restart with one fake wake, cross-company capacity and privacy cases. These do not prove live Mac interruption. |
+| Unknown remote state never causes duplicate dispatch | Journal fences, sticky admitted/unknown slots, terminal-proof release and a durable wake-intent ledger are tested. The implemented review/repair path also fences native task/wake intents, binds actual execution IDs before admission and retains unknown outcomes. |
 
 ## #14 — private remote access and MCP
 
 | Acceptance requirement | Evidence and remaining work |
 | --- | --- |
-| Private remote browser access with Paperclip auth | Missing Tailscale/equivalent configuration and acceptance evidence; current service is loopback-only. No app/CLI found at standard locations; daemon-state probe unavailable. |
+| Private remote browser access with Paperclip auth | The app-scoped [tsnet HTTPS proxy](remote-access.md) is implemented, fixture/race-tested and cross-built in hosted CI. Tailscale login, node approval, Paperclip hostname allowance and private remote acceptance remain pending; Paperclip remains loopback-only. |
 | Narrow MCP tools: list tasks, create assignments, pause workers, view runs | Implemented with company/project/agent allowlists and guarded new-task assignment. Official SDK protocol/negative tests pass; real task reads, unassigned draft creation, run listing and same-request reuse after server restart pass. Live assignments/pause and host/network acceptance remain unverified; assignments currently disabled. |
-| Authenticated outbound tunnel only if needed/supported | Need a concrete connectivity design; no tunnel configured or claimed. |
+| Authenticated outbound tunnel only if needed/supported | The implemented proxy exposes only its registered private HTTPS listener and retains Paperclip authentication. It is not authenticated or running remotely; no public tunnel/Funnel or MCP HTTP listener is configured. |
 | Phone access and unauthorized denial | Missing real phone and negative-access tests. |
-| Sleep/offline, token and recovery documentation | Foundation loopback/service limits documented; remote-specific operating guide missing. |
+| Sleep/offline, token and recovery documentation | [Remote operating guide](remote-access.md) covers foreground SSO, private state, HTTPS prerequisites, phone/negative tests and shutdown. Actual sleep/offline/login recovery and phone observations are pending. |
 | No public database/raw administrative API | Current loopback/private deployment supports the boundary; remote implementation must retain it. |
 
 ## #15 — multi-repository proof
 
 | Acceptance requirement | Evidence and remaining work |
 | --- | --- |
-| Two distinct repos onboarded solely by config and CLI | Missing live registrations/bootstrap through completed CLI. Only one Cloud environment is evidenced. |
+| Two distinct repos onboarded solely by config and CLI | One real Story Keeper configuration/registration/bootstrap is recorded. A second repository/environment and completed two-repo execution proof remain missing. |
 | Separate Cloud jobs with PR/CI/review evidence and project isolation | Missing integrated two-repo proof. |
 | Controller restart during both active jobs; no duplicate submissions | Missing live two-job restart evidence and provider submission counts. |
-| Enforced global/per-repo limits; history/operator decisions | Missing scheduling implementation and live enforcement evidence. |
+| Enforced global/per-repo limits; history/operator decisions | Global/per-repo scheduling, multi-company isolation, sticky capacity and fair role collection are implemented and fixture-tested. Live two-repo enforcement/history remains missing. |
 | Fresh-install demo, limitations and next backlog | Foundation smoke and single-repo procedure exist; integrated reproducible multi-repo demo missing. |
-| No automatic merge or deployment | Must hold across all new paths; existing dispatcher instruction alone cannot establish future behavior. |
+| No automatic merge or deployment | Controller/delivery/MCP paths provide no merge/deploy operation and role templates forbid them. Live two-repo acceptance must confirm the same boundary. |
 
 ## #16 — inspect the existing probe
 
@@ -130,4 +134,4 @@ The [verification issue](https://github.com/bradywatkinson/paperclip-codex-facto
 
 ## Completion boundary
 
-Advance configuration/onboarding, durable scheduling, GitHub delivery, roles and independent review while live approvals are pending. Then execute a useful single-repo coding proof and a two-repo proof against the integrated system. Foundation restore/UI/login and private phone access require their own observations. Keep this epic incomplete until every required behavior has evidence at its actual scope; do not substitute fixture success, docs-only patches, config validation or a READY label for end-to-end acceptance.
+Keep the implemented configuration/onboarding, scheduling, delivery, role and review/repair paths under verification while live approvals are pending. Then execute a useful single-repo coding proof and a two-repo proof against the integrated system. Foundation restore/UI/login and private phone access require their own observations. Keep this epic incomplete until every required behavior has evidence at its actual scope; do not substitute fixture success, docs-only patches, config validation or a READY label for end-to-end acceptance.

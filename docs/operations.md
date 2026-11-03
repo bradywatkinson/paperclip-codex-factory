@@ -120,7 +120,7 @@ Keep `~/.paperclip` private to this user and store backups in encrypted storage 
 
 Paperclip supports automatic database backups (hourly by default, with 30-day retention); check the actual instance settings. Automatic dumps stay on the same disk and exclude uploads, configuration, and key material. Also keep a full stopped-instance backup on separate encrypted storage.
 
-Paperclip's PostgreSQL logical dump does **not** include the factory's SQLite execution journal. The full stopped-instance copy must retain the entire `data/cloud-dispatch/` tree: each company's database, any `-wal`/`-shm` sidecars, and the compatibility fences. Pause dispatchers and wait for their processes and journal connections to close before copying. For an online journal backup, use the [SQLite backup API](https://nodejs.org/download/release/v24.15.0/docs/api/sqlite.html) rather than copying an open database file alone. See [journal backup and cutover](execution-journal.md#local-inspection-and-cutover).
+Paperclip's PostgreSQL logical dump does **not** include the factory's SQLite execution journal. The full stopped-instance copy must retain registry, scheduler, review/role and MCP intent stores as well as the entire `data/cloud-dispatch/` tree: each company's database, any `-wal`/`-shm` sidecars, and the compatibility fences. Pause dispatchers and wait for their processes and journal connections to close before copying. For an online journal backup, use the [SQLite backup API](https://nodejs.org/download/release/v24.15.0/docs/api/sqlite.html) rather than copying an open database file alone. See [journal backup and cutover](execution-journal.md#local-inspection-and-cutover).
 
 First pause agents and wait for active work to finish. Create a logical backup while the instance is running:
 
@@ -130,7 +130,7 @@ First pause agents and wait for active work to finish. Create a logical backup w
 ./scripts/paperclip service status --instance factory --json
 ```
 
-Confirm the server, embedded database, and local dispatcher/journal processes have stopped before copying. With a fresh destination on your encrypted backup volume:
+Confirm the server, embedded database, separate factory controller service, temporary foreground controller/runner, dispatcher processes and every SQLite connection have stopped before copying. Pausing agents alone does not quiesce these processes. With a fresh destination on your encrypted backup volume:
 
 ```sh
 umask 077
@@ -149,15 +149,19 @@ The global payload and Node runtime are outside `.paperclip`; record their paths
 
 ## Restore
 
-Use a stopped instance and the same Paperclip and PostgreSQL-compatible runtime as the backup. Do not overwrite a running database. Full-home restore is the foundation recovery path; SQL-only recovery requires upstream PostgreSQL tooling and is not automated here.
+Use a stopped instance and the same Paperclip and PostgreSQL-compatible runtime as the backup. Do not overwrite a running database. **Do not start an untouched clone of the instance.** Copied configuration, absolute paths, credentials, queued work, webhooks and provider state can still refer to production. `HEARTBEAT_SCHEDULER_ENABLED=false` disables only its heartbeat scheduler; it does not disable every background or provider worker and is not an isolation boundary.
 
-1. Stop the service and confirm the server and embedded database have exited. Preserve the current home under a new name for recovery; do not delete it.
+A **database-only data rehearsal** restores the logical dump into a separate disposable PostgreSQL instance and inspects records using PostgreSQL tooling, with the Paperclip application and factory controllers stopped for that copy. It does not establish uploads, configuration, secret decryption or full application recovery. This repository does not automate SQL restore.
+
+A **full recovery rehearsal** requires a quiescent complete state copy and process/network isolation established before any copied application or worker starts. Keep production stopped or independently isolated as the recovery plan requires. Review every copied absolute path, API/provider endpoint, service registration and environment binding privately; a different HTTP port or `PAPERCLIP_HOME` alone is insufficient. Prevent the clone from contacting production control planes, providers, webhooks and Cloud services. Reconnect external capabilities only after the isolated checks and explicit recovery decision. These are procedures, not evidence that a restore has been performed.
+
+1. Stop the Paperclip service, separate factory controller service and any temporary foreground runner. Confirm the server, embedded database and all local workers have exited. Preserve the current home under a new name for recovery; do not delete it.
 2. Restore the complete `paperclip-home` copy to `~/.paperclip`, including hidden files, config, `.env`, database, storage, and secret key. On the same Mac, use `ditto` from the backup to the empty destination.
 3. On a replacement Mac, install the pinned Node and Paperclip release and recreate the service registration. A copied managed shim or LaunchAgent can contain the old user's absolute paths: regenerate these rather than assuming they are portable. Preserve restored instance data and secrets.
-4. Run `./scripts/paperclip doctor`, then start the service. Check loopback binding and authenticated access before reconnecting any agents.
+4. After verifying the intended destination bindings and process/network isolation, run `./scripts/paperclip doctor`, then start only the recovery service needed for the rehearsal. Keep factory controllers, agents and provider/background work quiescent. Check loopback binding and authenticated access before deliberately reconnecting external capabilities.
 5. Verify the smoke-test company, goal, task assignment, approval result, and an uploaded fixture. Verify a known stored test secret remains usable without printing its value. Record the result and elapsed time.
 
-For an isolated rehearsal, restore to a separate home, configure a different HTTP and embedded PostgreSQL port, and run it in the foreground. Keep copied agents paused and never run two processes against the same home. Do not claim the restore test passed until data and secret decryption have been checked.
+For an isolated full rehearsal, use a separate home and distinct HTTP/PostgreSQL ports in addition to the process/network isolation above. Verify copied paths cannot write to production state and no copied controller or background worker can make production/provider requests. Keep copied agents paused and never run two processes against the same home. Record which data, uploads and secret-decryption checks actually passed; do not substitute a database-only check for full recovery acceptance.
 
 ## Upgrade and rollback
 

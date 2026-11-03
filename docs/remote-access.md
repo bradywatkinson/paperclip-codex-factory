@@ -2,7 +2,7 @@
 
 `tailnet-web` is an app-specific Tailscale node that proxies one HTTPS listener to the existing authenticated Paperclip UI at `http://127.0.0.1:8100`. It uses `tailscale.com/tsnet` pinned to **1.104.5**, built with **Go 1.27.3**. It requires neither administrator privileges nor a system Tailscale daemon, VPN configuration, kernel extension, host TCP443 listener, or global tailnet policy change. Tailscale's encrypted UDP transport still uses OS network sockets.
 
-The current implementation is a local build/test slice. A successful build, fixture test, or `ready` event does **not** prove remote connectivity, Paperclip login, phone use, login recovery, or operation after a reboot. Record those separately.
+The proxy is implemented and has a successful hosted build/test checkpoint. It has not been authenticated or started as a live tailnet node in the recorded evidence. A successful build, fixture test, or `ready` event does **not** prove remote connectivity, Paperclip login, phone use, login recovery, or operation after a reboot. Record those separately.
 
 ## Why an app-specific node
 
@@ -21,6 +21,8 @@ From this repository, with at least 2 GiB free and a working Go installation:
 The script uses `GOTOOLCHAIN=go1.27.3+auto`, `GOMODCACHE=$HOME/.cache/paperclip-factory-go/mod`, and `GOCACHE=$HOME/.cache/paperclip-factory-go/build`. It downloads the pinned toolchain/dependencies, resolves a missing initial module lock, verifies modules, runs Go race tests, and compiles the binary. It never runs the compiled app. Once `go.sum` exists, tidy must report no dependency changes. Keep the generated lock in version control.
 
 If local dependency downloads are blocked by the environment's network policy, the read-only-permission `Factory checks` GitHub Actions workflow runs Node 24.15.0 factory tests, Go 1.27.3 fixture/race tests, and a CGO-disabled `darwin/arm64` cross-build. The first run may bootstrap `go.mod`/`go.sum` and includes them in its artifact for review and a subsequent commit. Later runs require the committed module lock to remain unchanged. The binary is not executed by CI. The artifact includes the exact checked-out source SHA, toolchain version, and SHA256 checksums. Accept it only from a successful run for the reviewed repository/head; binary build success is separate from the Node job's result. No workflow publishes a release, modifies a PR, installs a service, authenticates Tailscale, merges, or deploys.
+
+The recorded successful hosted run is [41692000251](https://github.com/bradywatkinson/paperclip-codex-factory/actions/runs/41692000251), for source `d65872ba9023c025a5870444d72f0efcb57e5039`: 362 Node tests, Go fixture/race tests and the `darwin/arm64` cross-build passed. This published head predates the later local review/repair tests. The current session's dependency/artifact download is blocked by its network allowlist; obtaining/verifying the binary in normal Terminal and foreground SSO remain pending. No live node URL, hostname allowance or phone acceptance is established by the CI artifact.
 
 ## Foreground authentication
 
