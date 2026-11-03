@@ -75,7 +75,7 @@ See [the state model, schema migrations, inspection and cutover guide](docs/exec
 
 ## Cloud polling and review notifications
 
-Issue [#5](https://github.com/bradywatkinson/paperclip-codex-factory/issues/5) adds a foreground reconciler for known accepted Cloud executions. It polls the pinned CLI with bounded work and shared rate limits, records durable observations, and posts a review notification when Cloud reports READY. It **preserves every Paperclip task status**: a blocked task stays blocked until an operator decides the next step. Remote completion does not verify acceptance criteria, and unavailable final assistant output or PR metadata is stated explicitly.
+Issue [#5](https://github.com/bradywatkinson/paperclip-codex-factory/issues/5) adds a foreground reconciler for known accepted Cloud executions. It polls the pinned CLI with bounded work and shared rate limits, records durable observations, and creates a human-only review-notification card when Cloud reports READY. It **preserves every Paperclip task status**: a blocked task stays blocked until an operator decides the next step. Accepting the card acknowledges the handoff without completing the task or continuing an agent run. Remote completion does not verify acceptance criteria, and unavailable final assistant output or PR metadata is stated explicitly.
 
 Copy [the example configuration](examples/cloud-reconcile.json) into private controller storage, replace its company and absolute paths, and use the existing Codex ChatGPT sign-in and Paperclip Board CLI sign-in. Run a bounded pass with a supported Node runtime:
 
@@ -83,7 +83,7 @@ Copy [the example configuration](examples/cloud-reconcile.json) into private con
 node scripts/cloud-reconcile.mjs --config /absolute/path/to/cloud-reconcile.json --once
 ```
 
-Use `--loop` for periodic foreground polling; no service is installed automatically. Durable notification state survives local interruptions. An ambiguous comment write is checked for an existing exact Board-authored execution marker and is never automatically resent. A comment may wake a dispatcher; its journal guard prevents another Cloud submission for the accepted execution. See [configuration, operation, inspection, and delivery limits](docs/cloud-reconcile.md).
+Use `--loop` for periodic foreground polling; no service is installed automatically. Durable notification state survives local interruptions. The card has a stable interaction idempotency key. An ambiguous write is checked for an existing exact card body/key created by the signed-in Board user and is never automatically resent. Cards have no continuation or addressee and do not wake a dispatcher. Board comments are deliberately avoided because the pinned release can implicitly reopen blocked/done tasks. See [configuration, operation, inspection, and delivery limits](docs/cloud-reconcile.md).
 
 ## Upstream references
 

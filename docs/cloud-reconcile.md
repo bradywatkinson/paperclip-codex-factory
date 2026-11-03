@@ -1,6 +1,6 @@
 # Codex Cloud polling and review notifications
 
-Issue [#5](https://github.com/bradywatkinson/paperclip-codex-factory/issues/5) adds a local reconciler for accepted Cloud executions recorded in the [execution journal](execution-journal.md). It polls the pinned CLI, records sanitized observations, and posts a review notification to Paperclip when Cloud reports READY. **It preserves every Paperclip task status.** A blocked task stays blocked until an operator reviews the result and decides what to do.
+Issue [#5](https://github.com/bradywatkinson/paperclip-codex-factory/issues/5) adds a local reconciler for accepted Cloud executions recorded in the [execution journal](execution-journal.md). It polls the pinned CLI, records sanitized observations, and creates a review-notification interaction card in Paperclip when Cloud reports READY. **It preserves every Paperclip task status.** A blocked task stays blocked until an operator reviews the result and decides what to do.
 
 The implementation is `lib/cloud-reconcile.mjs`, invoked by `scripts/cloud-reconcile.mjs`. Reference versions are Node **24.15.0**, Codex CLI **0.166.0**, and Paperclip **2026.1023.0**. It uses the supported CLIs and the local schema-4 journal; it changes no Paperclip core files. Broader controller startup recovery remains #6.
 
@@ -8,7 +8,7 @@ The implementation is `lib/cloud-reconcile.mjs`, invoked by `scripts/cloud-recon
 
 The observed Cloud list contract recognizes `pending` and `ready`. A pending observation keeps a known execution running; READY records the remote execution as `succeeded` and queues a notification. That journal state means the Cloud job completed and needs review. It does not verify acceptance criteria or complete the Paperclip task.
 
-The notification includes the stable `https://chatgpt.com/remote/<taskId>` link and a deterministic execution marker. The CLI does not expose the final assistant response or PR metadata. The notification says those fields are unavailable; the reconciler does not invent result text, PR links, or acceptance evidence. Summary counts describe reported file and line changes, without treating zero changes as a failure.
+The interaction card includes the stable `https://chatgpt.com/remote/<taskId>` link and a deterministic execution marker. The CLI does not expose the final assistant response or PR metadata. The card says those fields are unavailable; the reconciler does not invent result text, PR links, or acceptance evidence. Summary counts describe reported file and line changes, without treating zero changes as a failure. The card offers **Reviewed** and **Needs follow-up**. Either response resolves the handoff card only: it does not verify acceptance criteria, mark the task done, resume an agent, or submit another Cloud execution.
 
 Unknown statuses, missing tasks, malformed output, environment or URL mismatches, local command failures, and timeouts remain unresolved and use bounded retry backoff. They do not prove remote failure, cancellation, or completion. The pinned `cloud status` command's pending exit code and `cloud diff`'s empty output are not used as terminal evidence. See [the observed CLI contract](codex-cloud/README.md).
 
@@ -26,7 +26,7 @@ Copy [the example](../examples/cloud-reconcile.json) to private controller confi
 | `apiBase` | Authenticated HTTP loopback origin, default `http://127.0.0.1:8100`. |
 | `intervalMs` | Delay between foreground passes; default `30000`. |
 | `maxRecords` | Maximum executions polled and maximum handoffs checked per pass, independently; default `10` for each phase. |
-| `maxPages` | Maximum Cloud list pages per execution and comment pages per ambiguous-delivery check; default `5`. |
+| `maxPages` | Maximum Cloud list pages per execution; default `5`. |
 | `requestGapMs` | Shared minimum gap between provider requests; default `1000`. |
 | `commandTimeoutMs` | Per-command local deadline; default `15000`. It does not cancel remote work. |
 | `leaseMs` | Durable work-claim lifetime; default `120000`. |
@@ -55,7 +55,7 @@ RECONCILE_CONFIG="$HOME/.paperclip/instances/factory/config/cloud-reconcile.json
 "$RECONCILE_NODE" scripts/cloud-reconcile.mjs --config "$RECONCILE_CONFIG" --loop
 ```
 
-`--once` performs a bounded pass. `--loop` repeats in the foreground; Control-C requests a stop after the current pass. No background service or LaunchAgent is installed automatically. Opening the journal upgrades a supported older schema, including during a one-pass run. Follow the [stopped-backup procedure](execution-journal.md#local-inspection-and-cutover) before the first run against an existing journal.
+`--once` performs a bounded pass. `--loop` repeats in the foreground; Control-C requests a stop between commands. No background service or LaunchAgent is installed automatically. Opening the journal upgrades a supported older schema, including during a one-pass run. Follow the [stopped-backup procedure](execution-journal.md#local-inspection-and-cutover) before the first run against an existing journal.
 
 Only due `running` or `unknown` records with a validated stored Cloud ID are eligible. Queued and dispatching submissions are not polled. Unknown submissions without an ID require operator investigation; the reconciler does not guess a match from titles, search for a replacement execution, or submit a retry. A later attempt still requires an explicit sequential attempt number after the previous attempt is confirmed terminal.
 
@@ -65,11 +65,15 @@ Each pass runs commands serially, with one command in flight. Per-execution leas
 
 The journal persists only task identity, validated timestamps/statuses, bounded summary counts, schedules, lease metadata, stable error codes, and the fixed generated notification. It excludes raw command output, stderr, task titles, prompts, API response bodies, and credentials. Pending notification delivery is tracked separately from execution state, so a completed execution remains eligible for its undelivered notification.
 
-Before notification, the reconciler checks the current Paperclip company, project/workspace and repository binding, task assignment, and original dispatch ownership. Only an unchanged task still in `blocked` is notified. Completed/cancelled tasks, tasks already in review or another status, and changed bindings or assignees are preserved and delivery is skipped. It never changes task status or assignment. Paperclip may wake an assigned dispatcher when a Board comment is added. The dispatch bridge's journal guard prevents that wake from submitting an already accepted execution again.
+Before notification, the reconciler checks the current Paperclip company, project/workspace and repository binding, task assignment, and original dispatch ownership. Only an unchanged task still in `blocked` is notified. Completed/cancelled tasks, tasks already in review or another status, and changed bindings or assignees are preserved and delivery is skipped. It never changes task status or assignment.
 
-The outbox records `sending` durably before invoking the comment write. An expired lease that never reached `sending` can be retried. An interrupted, timed-out, or otherwise ambiguous write becomes a read-reconciliation case: **it is never automatically sent again**. Later passes search for the exact generated comment and execution marker authored by the currently signed-in Board user. A confirmed matching comment marks delivery complete. An absent or unverifiable match remains unknown for operator attention and bounded later read checks. A marker quoted by an agent is not sufficient proof of delivery; changing Board users can also prevent automatic confirmation of an earlier write.
+The notification uses the supported `issue interaction:create` CLI with an idempotency key `factory-cloud-review:<executionId>`, kind `request_confirmation`, resolver policy `human_only`, and continuation policy `none`. Its custom target is distinct from Paperclip's native completion-review workflow. It has no addressee or source-run ID. The server locks the issue while creating the card and atomically rejects a terminal issue without changing its status. The card does not wake a dispatcher or continue an agent run. The dispatch bridge's duplicate-submission guard remains protection against independent wakes.
 
-Do not delete fences, reset outbox rows, increment attempts, or rerun a comment manually merely to clear an unknown state. Inspect the existing Paperclip comments and journal evidence first. The Paperclip CLI does not expose a conditional status update or comment idempotency key, which is why this slice preserves status and refuses to replay an ambiguous write.
+The outbox records `sending` durably before invoking interaction creation. An expired lease that never reached `sending` can be retried. An interrupted, timed-out, or otherwise ambiguous write becomes a read-reconciliation case: **it is never automatically sent again**. Later passes use `issue interactions` to search for an exact matching card body and idempotency key created by the currently signed-in Board user. A confirmed matching card marks delivery complete. An absent or unverifiable match remains unknown for operator attention and bounded later read checks. An agent-created card or copied marker is not sufficient proof of delivery; changing Board users can also prevent automatic confirmation of an earlier write.
+
+Do not delete fences, reset outbox rows, increment attempts, or create a replacement card manually merely to clear an unknown state. Inspect the existing Paperclip interactions and journal evidence first. The stable interaction idempotency key provides server-side duplicate protection; the local outbox also refuses to replay ambiguous writes.
+
+Source inspection of the pinned Paperclip release showed that Board-authenticated issue comments, including comments supplied through issue PATCH, can implicitly reopen `blocked` or `done` tasks as `todo`. Omitting a status argument does not make those routes status preserving. This reconciler therefore uses interaction cards and never uses Board comments as notifications. This behavior was discovered before any live notification write; it is source evidence, not a live status-change experiment.
 
 ## Inspection and verification
 
