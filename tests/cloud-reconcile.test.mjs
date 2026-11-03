@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { ExecutionJournal } from '../lib/execution-journal.mjs';
+import { dispatchFromPaperclip } from '../lib/cloud-dispatch.mjs';
 import { buildReviewInteraction, parseCloudPage, reconcileOnce, validateReconcileConfig } from '../lib/cloud-reconcile.mjs';
 
 const COMPANY = '11111111-1111-4111-8111-111111111111';
@@ -142,6 +143,108 @@ test('ready Cloud execution sends one review notification and preserves the Pape
     assert.equal(call.options.env.PAPERCLIP_API_KEY, undefined);
     assert.equal(call.options.env.PAPERCLIP_RUN_ID, undefined);
   }
+});
+
+test('READY during the original blocked handoff remains pending and delivers once after dispatch ends', async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'factory-cloud-handoff-race-'));
+  const journal = new ExecutionJournal({ directory, companyId: COMPANY });
+  t.after(async () => { journal.close(); await fs.rm(directory, { recursive: true, force: true }); });
+  const heartbeat = { status: 'running' };
+  const f = fixture({ heartbeat, issue: { status: 'todo', title: 'Inspect the README', description: 'Acceptance criteria: report the README heading without changes.' } });
+  const started = Promise.withResolvers(), release = Promise.withResolvers();
+  let submissions = 0;
+  const request = async (url, options) => {
+    const endpoint = new URL(url).pathname, method = options.method ?? 'GET';
+    let value;
+    if (endpoint === '/api/agents/me') value = { id: AGENT, companyId: COMPANY };
+    else if (endpoint === '/api/heartbeat-runs/' + RUN) value = { id: RUN, companyId: COMPANY, agentId: AGENT, status: heartbeat.status, contextSnapshot: { issueId: ISSUE } };
+    else if (endpoint === '/api/projects/' + PROJECT) value = project();
+    else if (endpoint === '/api/issues/' + ISSUE + '/checkout') value = Object.assign(f.issueState, { status: 'in_progress', executionRunId: RUN, checkoutRunId: RUN });
+    else if (endpoint === '/api/issues/' + ISSUE && method === 'PATCH') {
+      const body = JSON.parse(options.body);
+      assert.equal(body.status, 'blocked');
+      started.resolve();
+      await release.promise;
+      value = Object.assign(f.issueState, body);
+    } else if (endpoint === '/api/issues/' + ISSUE) value = f.issueState;
+    else throw new Error('Unexpected dispatch fixture endpoint: ' + endpoint);
+    return new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } });
+  };
+  const run = async (...args) => {
+    if (args[1][0] === 'cloud' && args[1][1] === 'exec') { submissions++; return { ...RESULT, stdout: RECEIPT.emittedUrl + '\n' }; }
+    return f.run(...args);
+  };
+  const dispatch = dispatchFromPaperclip({ config: { schemaVersion: 1, ...IDENTITY, codexCommand: '/fixture/codex' },
+    context: { apiUrl: 'http://127.0.0.1:8100', apiKey: 'INERT_DISPATCH_FIXTURE', companyId: COMPANY, agentId: AGENT, runId: RUN },
+    stateDir: directory, request, run, env: {},
+  });
+  let context, pending;
+  try {
+    await Promise.race([started.promise, dispatch.then(() => { throw new Error('Dispatch completed without entering the handoff'); })]);
+    const execution = journal.get(ISSUE);
+    assert.equal(execution.state, 'running', 'The real dispatcher must have committed its accepted receipt');
+    assert.equal(f.issueState.status, 'in_progress');
+    context = { journal, config: { schemaVersion: 1, companyId: COMPANY, stateDir: directory, codexCommand: '/fixture/codex', paperclipCommand: '/fixture/paperclip' }, executionId: execution.executionId };
+    const first = await invoke(context, f);
+    assert.equal(first.ready, 1);
+    assert.equal(first.unresolved, 1);
+    assert.equal(first.skipped, 0);
+    assert.equal(journal.get(ISSUE).state, 'succeeded');
+    pending = journal.handoffs(execution.executionId)[0];
+    assert.equal(pending.state, 'pending');
+    assert.equal(pending.errorCode, 'PAPERCLIP_DISPATCH_ACTIVE');
+    assert.equal(notificationCalls(f).length, 0);
+    assert.equal(f.issueState.status, 'in_progress');
+  } finally {
+    release.resolve();
+    await dispatch;
+  }
+  assert.equal(f.issueState.status, 'blocked');
+  heartbeat.status = 'succeeded';
+  const callsBeforeDue = f.calls.length;
+  const beforeDue = new Date(Date.parse(pending.nextAttemptAt) - 1).toISOString();
+  assert.equal((await invoke(context, f, beforeDue)).notified, 0);
+  assert.equal(f.calls.length, callsBeforeDue, 'Deferred notification must honor its retry schedule');
+  const second = await invoke(context, f, '2030-01-02T00:10:00.000Z');
+  assert.equal(second.polled, 0, 'Remote completion must not need a second Cloud poll');
+  assert.equal(second.notified, 1);
+  const delivered = journal.handoffs(context.executionId)[0];
+  assert.equal(delivered.id, pending.id);
+  assert.equal(delivered.state, 'delivered');
+  assert.equal(delivered.errorCode, null);
+  await invoke(context, f, '2030-01-02T00:20:00.000Z');
+  assert.equal(cloudCalls(f).length, 1);
+  assert.equal(notificationCalls(f).length, 1);
+  assert.equal(submissions, 1);
+  assert.equal(journal.list().length, 1);
+  assert.equal(f.issueState.status, 'blocked');
+});
+
+for (const status of ['queued', 'running']) test('an active ' + status + ' dispatch defers notification even after the task is blocked', async t => {
+  const context = await setup(t), heartbeat = { status }, f = fixture({ heartbeat });
+  const result = await invoke(context, f);
+  assert.equal(result.unresolved, 1);
+  assert.equal(result.skipped, 0);
+  assert.equal(notificationCalls(f).length, 0);
+  assert.equal(context.journal.handoffs(context.executionId)[0].state, 'pending');
+  assert.equal(context.journal.handoffs(context.executionId)[0].errorCode, 'PAPERCLIP_DISPATCH_ACTIVE');
+  heartbeat.status = 'succeeded';
+  assert.equal((await invoke(context, f, '2030-01-02T00:10:00.000Z')).notified, 1);
+  assert.equal(cloudCalls(f).length, 1);
+});
+
+for (const [name, patch, errorCode] of [
+  ['completed', { status: 'done' }, 'PAPERCLIP_ALREADY_TERMINAL'],
+  ['cancelled', { status: 'cancelled' }, 'PAPERCLIP_ALREADY_TERMINAL'],
+  ['reassigned', { assigneeAgentId: USER }, 'PAPERCLIP_ASSIGNEE_CHANGED'],
+]) test('an active dispatch does not defer a human ' + name + ' task', async t => {
+  const context = await setup(t), f = fixture({ issue: patch, heartbeat: { status: 'running' } });
+  const result = await invoke(context, f);
+  assert.equal(result.skipped, 1);
+  assert.equal(result.unresolved, 0);
+  assert.equal(notificationCalls(f).length, 0);
+  assert.equal(context.journal.handoffs(context.executionId)[0].state, 'skipped');
+  assert.equal(context.journal.handoffs(context.executionId)[0].errorCode, errorCode);
 });
 
 test('pending tasks stay pollable without a Paperclip notification', async t => {
