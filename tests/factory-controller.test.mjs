@@ -55,7 +55,8 @@ function setup(t, { maxGlobalActive = 2, maxRepositoryActive = 1, sameCompanyRun
     if (args[0] === 'run') return json(wakeRuns.get(args[2]) ?? { id: entry.ownerId, companyId: entry.companyId, agentId: entry.agentId, status: state.ownerActive ? 'running' : 'succeeded', contextSnapshot: { issueId: entry.issueId } });
     if (args[0] === 'issue' && args[1] === 'get') return json({ id: entry.issueId, companyId: entry.companyId, projectId: entry.projectId, projectWorkspaceId: entry.workspaceId, assigneeAgentId: (entry.overrides.reassigned ?? state.reassigned) ? uuid(999) : entry.agentId, assigneeUserId: null, status: entry.overrides.status ?? state.status, title: 'Fix a small parser defect', description: entry.overrides.description ?? state.description });
     if (args[0] === 'issue' && args[1] === 'live-runs') return json(state.live);
-    if (args[0] === 'agent' && args[1] === 'configuration') return json({ id: entry.agentId, companyId: entry.companyId, status: 'idle', adapterType: 'process', adapterConfig: { command: runtime.nodeCommand, args: [path.join(runtime.factoryRoot, 'scripts/cloud-dispatch.mjs'), '--config', entry.plan.dispatchConfigPath], cwd: runtime.factoryRoot, timeoutSec: 180, graceSec: 10 }, runtimeConfig: { heartbeat: { enabled: false, intervalSec: 0, wakeOnDemand: true, maxConcurrentRuns: 1 } }, metadata: { factory: { registrationId: entry.operationId, repository: entry.registration.repository } } });
+    if (args[0] === 'agent' && args[1] === 'get') return json({ id: entry.agentId, companyId: entry.companyId, status: 'idle', adapterType: 'process', metadata: { factory: { registrationId: entry.operationId, repository: entry.registration.repository } }, ...entry.overrides.agentGetPatch });
+    if (args[0] === 'agent' && args[1] === 'configuration') return json({ id: entry.agentId, companyId: entry.companyId, status: 'idle', adapterType: 'process', adapterConfig: { command: runtime.nodeCommand, args: [path.join(runtime.factoryRoot, 'scripts/cloud-dispatch.mjs'), '--config', entry.plan.dispatchConfigPath], cwd: runtime.factoryRoot, timeoutSec: 180, graceSec: 10 }, runtimeConfig: { heartbeat: { enabled: false, intervalSec: 0, wakeOnDemand: true, maxConcurrentRuns: 1 } }, ...entry.overrides.configurationPatch });
     if (args[0] === 'project') return json({ id: entry.projectId, companyId: entry.companyId, workspaces: [{ id: entry.workspaceId, companyId: entry.companyId, projectId: entry.projectId, repoUrl: 'https://github.com/' + entry.registration.repository, repoRef: 'main', defaultRef: 'main', isPrimary: true }] });
     if (args[0] === 'agent' && args[1] === 'wake') {
       const wake = { id: uuid(500 + wakes.length), companyId: entry.companyId, agentId: entry.agentId, status: 'succeeded', contextSnapshot: { issueId: entry.issueId } };
@@ -232,4 +233,23 @@ test('operator tightened account/repository ceilings remain authoritative withou
   assert.equal(f.wakes.length, 1); assert.equal(f.wakes[0].entry.companyId, f.entries[1].companyId);
   assert.equal(f.scheduler.settings().limits.maxGlobalActive, 1);
   assert.ok(f.scheduler.repositories().every(row => row.maxActive === 1 && row.maxAttempts === 1));
+});
+
+test('fresh ownership row is required while native configuration intentionally omits metadata', async t => {
+  for (const patch of [{ metadata: {} }, { metadata: { factory: { registrationId: 'wrong', repository: 'fixture/project-1' } } }, { id: uuid(999) }, { status: 'terminated' }, { adapterType: 'codex_local' }]) {
+    const f = setup(t); f.entries[0].overrides.agentGetPatch = patch;
+    const result = await f.invoke();
+    assert.equal(f.wakes.length, 0); assert.ok(result.needsAttention.some(row => row.code === 'FACTORY_AGENT_CONFIGURATION_CHANGED'));
+  }
+  const native = setup(t); await native.invoke();
+  assert.equal(native.wakes.length, 1);
+  assert.ok(native.calls.some(row => row.args[0] === 'agent' && row.args[1] === 'get'));
+});
+
+test('configuration projection still must identify the expected usable process agent', async t => {
+  for (const patch of [{ id: uuid(999) }, { companyId: uuid(999) }, { status: 'terminated' }, { status: 'error' }, { adapterType: 'codex_local' }, { runtimeConfig: { heartbeat: { enabled: true, intervalSec: 60, wakeOnDemand: true, maxConcurrentRuns: 1 } } }]) {
+    const f = setup(t); f.entries[0].overrides.configurationPatch = patch;
+    const result = await f.invoke();
+    assert.equal(f.wakes.length, 0); assert.ok(result.needsAttention.some(row => row.code === 'FACTORY_AGENT_CONFIGURATION_CHANGED'));
+  }
 });
