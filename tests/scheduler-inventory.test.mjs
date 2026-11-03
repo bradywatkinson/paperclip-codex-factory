@@ -6,7 +6,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { DispatchScheduler } from '../lib/dispatch-scheduler.mjs';
-import { ExecutionJournal, JOURNAL_FILENAME } from '../lib/execution-journal.mjs';
+import { ExecutionJournal, JOURNAL_FILENAME, FENCE_STAGING_DIRECTORY, MAX_FENCE_BYTES } from '../lib/execution-journal.mjs';
 import { inventoryJournalRoot } from '../lib/scheduler-inventory.mjs';
 
 const COMPANY_A = '11111111-1111-4111-8111-111111111111';
@@ -215,4 +215,49 @@ test('empty company directories and oversized guards do not silently become empt
   fs.writeFileSync(current.guard, ' '.repeat(65_537));
   assert.throws(() => inventoryJournalRoot({ directory: f.root, scheduler: f.scheduler }), { code: 'SCHEDULER_INVENTORY_INVALID_GUARD' });
   assert.deepEqual(f.scheduler.list(), []);
+});
+
+test('partial unpublished fence staging left by a crash does not hide journal work or block inventory', t => {
+  const f = fixture(t), current = execution(f.root, COMPANY_A, { state: 'queued' });
+  const staging = path.join(current.directory, FENCE_STAGING_DIRECTORY); fs.mkdirSync(staging);
+  const abandoned = path.join(staging, randomUUID() + '.tmp'); fs.writeFileSync(abandoned, '{"schemaVersion":');
+  const before = fs.readFileSync(abandoned);
+  const queued = inventoryJournalRoot({ directory: f.root, scheduler: f.scheduler });
+  assert.equal(queued.queued, 1); assert.equal(queued.active, 0); assert.equal(f.scheduler.snapshot().activeCount, 0);
+  const journal = new ExecutionJournal({ directory: current.directory, companyId: COMPANY_A });
+  try { journal.claim(current.record.paperclipIssueId, OWNER); journal.accept(current.record.paperclipIssueId, OWNER, receipt); }
+  finally { journal.close(); }
+  const accepted = inventoryJournalRoot({ directory: f.root, scheduler: f.scheduler });
+  assert.equal(accepted.active, 1); assert.equal(f.scheduler.get(current.record.executionId).cloudTaskId, CLOUD);
+  assert.deepEqual(fs.readFileSync(abandoned), before);
+});
+
+test('only bounded regular UUID staging files are ignored; unknown names, symlinks and oversized bytes block', t => {
+  const f = fixture(t), current = execution(f.root, COMPANY_A);
+  const staging = path.join(current.directory, FENCE_STAGING_DIRECTORY);
+  const unexpected = path.join(staging, 'unknown.json'); fs.writeFileSync(unexpected, '{}');
+  assert.throws(() => inventoryJournalRoot({ directory: f.root, scheduler: f.scheduler }), { code: 'SCHEDULER_INVENTORY_UNKNOWN_STORAGE_SHAPE' });
+  fs.unlinkSync(unexpected);
+  const name = path.join(staging, randomUUID() + '.tmp'); fs.symlinkSync(current.guard, name);
+  assert.throws(() => inventoryJournalRoot({ directory: f.root, scheduler: f.scheduler }), { code: 'SCHEDULER_INVENTORY_UNSAFE_STORAGE' });
+  fs.unlinkSync(name); fs.writeFileSync(name, ' '.repeat(MAX_FENCE_BYTES + 1));
+  assert.throws(() => inventoryJournalRoot({ directory: f.root, scheduler: f.scheduler }), { code: 'SCHEDULER_INVENTORY_INVALID_GUARD' });
+  fs.unlinkSync(name);
+  const saved = path.join(f.directory, 'saved-staging'); fs.renameSync(staging, saved); fs.symlinkSync(saved, staging);
+  assert.throws(() => inventoryJournalRoot({ directory: f.root, scheduler: f.scheduler }), { code: 'SCHEDULER_INVENTORY_UNSAFE_STORAGE' });
+  assert.deepEqual(f.scheduler.list(), []);
+});
+
+test('a publisher cleaning up a known staging file during inventory cannot poison the scan', t => {
+  const f = fixture(t), current = execution(f.root, COMPANY_A);
+  const abandoned = path.join(current.directory, FENCE_STAGING_DIRECTORY, randomUUID() + '.tmp'); fs.writeFileSync(abandoned, 'partial');
+  const lstat = fs.lstatSync;
+  let removed = false;
+  const mock = t.mock.method(fs, 'lstatSync', (target, ...options) => {
+    if (!removed && target === abandoned) { removed = true; fs.unlinkSync(abandoned); }
+    return lstat(target, ...options);
+  });
+  try { assert.equal(inventoryJournalRoot({ directory: f.root, scheduler: f.scheduler }).active, 1); }
+  finally { mock.mock.restore(); }
+  assert.equal(removed, true);
 });
