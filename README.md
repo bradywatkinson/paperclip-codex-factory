@@ -71,7 +71,7 @@ The original smoke verification passed 28 local tests. See [the live evidence](d
 
 Issue [#4](https://github.com/bradywatkinson/paperclip-codex-factory/issues/4) adds a SQLite journal for execution identity, attempts, state, receipts, transition history, and Paperclip run associations. The bridge uses a transactional claim before submission and retains unknown outcomes without automatic retries. Existing JSON guards import without changing their bytes, and compatibility fences prevent an older writer from bypassing the journal claim.
 
-See [the state model, schema migrations, inspection and cutover guide](docs/execution-journal.md). Historical schema-3 validation passed **63/63 tests** on Node 24.15.0. The schema-4 journal adds polling leases, sanitized observations, a durable notification outbox, and shared provider rate reservations; its journal tests passed **38/38**. The historical schema-2 [additive PAP-2 guard migration](docs/evidence/issue-4-execution-journal/live-migration.json) preserved the original file hash, Cloud ID, and original run; repeated import was stable, with no Cloud submission or Paperclip task change. The [live schema-3 upgrade](docs/evidence/issue-4-execution-journal/schema-upgrade.json) also preserved execution identity and receipt data while correcting import-audit timestamps to the original import observation. These historical records do not establish live schema-4 migration. `running` means an accepted receipt, not confirmed Cloud completion. Full reboot/power-loss recovery remains untested; startup reconciliation remains #6.
+See [the state model, schema migrations, inspection and cutover guide](docs/execution-journal.md). Historical schema-3 validation passed **63/63 tests** on Node 24.15.0. The schema-4 journal adds polling leases, sanitized observations, a durable notification outbox, and shared provider rate reservations; its journal tests passed **38/38**. The historical schema-2 [additive PAP-2 guard migration](docs/evidence/issue-4-execution-journal/live-migration.json) preserved the original file hash, Cloud ID, and original run; repeated import was stable, with no Cloud submission or Paperclip task change. The [live schema-3 upgrade](docs/evidence/issue-4-execution-journal/schema-upgrade.json) also preserved execution identity and receipt data while correcting import-audit timestamps to the original import observation. These historical records do not establish live schema-4 migration. `running` means an accepted receipt, not confirmed Cloud completion. Full reboot/power-loss recovery remains untested; the startup recovery controller below implements #6 with separate verification limits.
 
 ## Cloud polling and review notifications
 
@@ -84,6 +84,16 @@ node scripts/cloud-reconcile.mjs --config /absolute/path/to/cloud-reconcile.json
 ```
 
 Use `--loop` for periodic foreground polling; no service is installed automatically. Durable notification state survives local interruptions. The card has a stable interaction idempotency key. An ambiguous write is checked for an existing exact card body/key created by the signed-in Board user and is never automatically resent. Cards have no continuation or addressee and do not wake a dispatcher. Board comments are deliberately avoided because the pinned release can implicitly reopen blocked/done tasks. See [configuration, operation, inspection, and delivery limits](docs/cloud-reconcile.md).
+
+## Controller restart recovery
+
+Issue [#6](https://github.com/bradywatkinson/paperclip-codex-factory/issues/6) adds a foreground recovery controller that inventories unfinished journal work and resumes polling the same known Cloud IDs. It preserves active claims, leases, retry schedules, receipts, and duplicate-submission fences. Interrupted dispatch claims become unknown only after the original Paperclip run is confirmed terminal; missing identities remain an investigation task.
+
+```sh
+node scripts/controller-recovery.mjs --config /absolute/path/to/cloud-reconcile.json --loop
+```
+
+The same private configuration supports a consecutive polling-error limit (default 8), durable company-wide usage cooldown, and explicit resumption of read-only polling. Startup never submits Cloud work or resets ambiguous notification writes. No background service is installed automatically. See [startup behavior, operator recovery, and verification limits](docs/controller-recovery.md); process-restart fixture tests do not establish Mac reboot or physical power-loss recovery.
 
 ## Upstream references
 

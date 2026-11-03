@@ -4,7 +4,7 @@ Issue [#4](https://github.com/bradywatkinson/paperclip-codex-factory/issues/4) r
 
 The journal uses Node's built-in `node:sqlite`, with no package dependency. The reference runtime is Node **24.15.0**, where the [SQLite module is release candidate, stability 1.2](https://nodejs.org/download/release/v24.15.0/docs/api/sqlite.html). The journal accepts Node 24.x from 24.15 onward or Node 26 and newer, and rejects Node 25. Keep the dispatcher agent's absolute Node path on a supported runtime.
 
-The journal stores dispatch state and the durable polling/notification records used by the [Cloud reconciler](cloud-reconcile.md) in #5. The reconciler preserves Paperclip task status; automatic task acceptance is not part of this slice. Controller-startup recovery remains #6. A journal row marked `running` means an accepted Cloud receipt is recorded; it is not proof that Cloud work is still executing or has succeeded.
+The journal stores dispatch state and the durable polling/notification records used by the [Cloud reconciler](cloud-reconcile.md) in #5. The reconciler preserves Paperclip task status; automatic task acceptance is not part of this slice. The [#6 recovery controller](controller-recovery.md) adds startup inventory and bounded operator recovery. A journal row marked `running` means an accepted Cloud receipt is recorded; it is not proof that Cloud work is still executing or has succeeded.
 
 ## Storage and identity
 
@@ -65,6 +65,8 @@ Observations retain validated Cloud IDs/statuses/timestamps, the `filesChanged`/
 A READY observation can atomically record execution `succeeded` and create one immutable `ready_for_review` outbox entry. The generated interaction-card body contains the stored Cloud link and execution marker, with an explicit statement that final assistant output and PR metadata are unavailable. This execution result means remote completion, not verification of acceptance criteria. The reconciler supports notification delivery only and preserves all Paperclip task statuses. Its human-only confirmation card uses `factory-cloud-review:<executionId>` as a server-side idempotency key, a custom target, no addressee/source-run ID, and no continuation. Accepting the card acknowledges the review handoff; an operator separately decides the actual task status.
 
 Outbox delivery has its own token/expiry and remains inspectable after execution completion. It progresses from `pending` to `leased`, then records `sending` before a write. An expired `leased` entry can be claimed again. An expired `sending` or `unknown` entry can only be checked for an existing exact interaction body/key created by the signed-in Board user; it cannot return automatically to a sendable state. A confirmed card is `delivered`; task/scope changes can be `skipped`; ambiguous writes remain `unknown` until confirmed. All CLI/API work happens outside transactions. Interaction creation locks the issue and rejects terminal issues atomically without changing status. Board comments are unsuitable for this handoff because the pinned release can implicitly reopen blocked/done tasks when a Board comment is added.
+
+The recovery controller reuses schema 4 without migration. `providerRequestLimit()` reads the company deadline; `deferProviderRequests({ now, delayMs })` can only retain or extend it. `resumePolling(executionId, { now })` is an explicit operator reset of read-only polling for a known nonterminal receipt. It rejects active leases, preserves execution identity, revision, receipt, remote watermark and provider cooldown, and records `OPERATOR_RESUMED_POLLING` as a sanitized observation. It does not reset an ambiguous notification or permit Cloud resubmission. See [controller recovery and resume commands](controller-recovery.md).
 
 See [reconciler configuration, operation and ambiguous-write handling](cloud-reconcile.md) for the operator workflow. Poll leases do not discover missing dispatch receipts, cancel Cloud work, or create new attempts.
 
@@ -134,7 +136,7 @@ This changes a `dispatching` journal row to `unknown`; it **does not cancel a Cl
 Run the journal and bridge tests with Node 24.15.0:
 
 ```sh
-node --test tests/execution-journal.test.mjs tests/reconciliation-journal.test.mjs tests/cloud-dispatch.test.mjs
+node --test tests/execution-journal.test.mjs tests/reconciliation-journal.test.mjs tests/recovery-journal.test.mjs tests/cloud-dispatch.test.mjs
 node --test tests/*.test.mjs
 ```
 
@@ -156,4 +158,4 @@ The current implementation upgrades journal schemas through version 4. The initi
 
 Schema 3 corrected `updated_at` and the initial event's `at` to the already recorded original import time, `2026-11-02T17:47:08.305Z`. It did not invent a new remote acceptance time or use the later schema-upgrade time. Repeated import preserved the complete record. The upgrade submitted no Cloud work and changed no Paperclip task state; the process dispatcher remained paused.
 
-The #3 [live dispatch evidence](evidence/issue-3-cloud-dispatch/README.md) remains a historical JSON-guard observation. Full Mac-reboot and physical power-loss recovery have not been tested. Issue #5 adds polling and status-preserving review notifications; broader startup/restart reconciliation remains #6.
+The #3 [live dispatch evidence](evidence/issue-3-cloud-dispatch/README.md) remains a historical JSON-guard observation. Full Mac-reboot and physical power-loss recovery have not been tested. Issue #5 adds polling and status-preserving review notifications; [issue #6 startup recovery](controller-recovery.md) has separate process-restart verification and does not establish Mac reboot or physical power-loss behavior.

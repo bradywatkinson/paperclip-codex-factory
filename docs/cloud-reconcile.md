@@ -2,7 +2,7 @@
 
 Issue [#5](https://github.com/bradywatkinson/paperclip-codex-factory/issues/5) adds a local reconciler for accepted Cloud executions recorded in the [execution journal](execution-journal.md). It polls the pinned CLI, records sanitized observations, and creates a review-notification interaction card in Paperclip when Cloud reports READY. **It preserves every Paperclip task status.** A blocked task stays blocked until an operator reviews the result and decides what to do.
 
-The implementation is `lib/cloud-reconcile.mjs`, invoked by `scripts/cloud-reconcile.mjs`. Reference versions are Node **24.15.0**, Codex CLI **0.166.0**, and Paperclip **2026.1023.0**. It uses the supported CLIs and the local schema-4 journal; it changes no Paperclip core files. Broader controller startup recovery remains #6.
+The implementation is `lib/cloud-reconcile.mjs`, invoked by `scripts/cloud-reconcile.mjs`. Reference versions are Node **24.15.0**, Codex CLI **0.166.0**, and Paperclip **2026.1023.0**. It uses the supported CLIs and the local schema-4 journal; it changes no Paperclip core files. The [#6 recovery controller](controller-recovery.md) adds startup inventory, bounded polling retries, and durable usage cooldown around this reconciler.
 
 ## What READY establishes
 
@@ -31,6 +31,8 @@ Copy [the example](../examples/cloud-reconcile.json) to private controller confi
 | `commandTimeoutMs` | Per-command local deadline; default `15000`. It does not cancel remote work. |
 | `leaseMs` | Durable work-claim lifetime; default `120000`. It must exceed the configured worst-case command budget described below. |
 | `maxOutputBytes` | Bound on captured command output; default `256000`. |
+| `maxPollErrors` | Consecutive provider failures before polling pauses for attention; default `8`. An explicit operator action resumes the same execution. |
+| `usageLimitBackoffMs` | Minimum durable company-wide usage/rate-limit cooldown; default `900000` (15 minutes). |
 
 There is no task-status mode in the reconciler configuration. Delivery is notification only.
 
@@ -59,6 +61,8 @@ RECONCILE_CONFIG="$HOME/.paperclip/instances/factory/config/cloud-reconcile.json
 
 `--once` performs a bounded pass. `--loop` repeats in the foreground; Control-C requests a stop between commands. No background service or LaunchAgent is installed automatically. Opening the journal upgrades a supported older schema, including during a one-pass run. Follow the [stopped-backup procedure](execution-journal.md#local-inspection-and-cutover) before the first run against an existing journal.
 
+For startup inventory and operator recovery, use [the recovery controller](controller-recovery.md) instead of the polling-only entrypoint. It preserves existing due schedules and leases.
+
 Only due `running` or `unknown` records with a validated stored Cloud ID are eligible. Queued and dispatching submissions are not polled. Unknown submissions without an ID require operator investigation; the reconciler does not guess a match from titles, search for a replacement execution, or submit a retry. A later attempt still requires an explicit sequential attempt number after the previous attempt is confirmed terminal.
 
 ## Durable observations and delivery
@@ -81,7 +85,7 @@ Source inspection of the pinned Paperclip release showed that Board-authenticate
 
 ## Inspection and verification
 
-Each CLI pass prints JSON with `polled`, `ready`, `notified`, `skipped`, and `unresolved` counts. Its status is `reconciled` when `unresolved` is zero and `needs_attention` otherwise. Operational failures can remain unresolved with a future retry schedule; a completed pass is not proof that every notification was delivered. Startup/configuration failures also emit `status: needs_attention`, a stable error code, and a nonzero exit.
+Each polling-only CLI pass prints JSON with `polled`, `ready`, `notified`, `skipped`, and `unresolved` counts, and optional `paused` or `providerRetryAt` fields. Its status is `needs_attention` if a reconciliation outcome is unresolved, polling is paused at its retry limit, or a provider deadline is pending; otherwise it is `reconciled`. The [recovery controller](controller-recovery.md#reports-and-verification-limits) adds inventory details and distinguishes an ordinary `recovering` wait from an attention reason. Operational failures can remain unresolved with a future retry schedule; a completed pass is not proof that every notification was delivered. Startup/configuration failures also emit `status: needs_attention`, a stable error code, and a nonzero exit.
 
 Use `scripts/execution-journal.mjs get` with the company, issue, and attempt to inspect execution state, polling schedule, observations, and handoffs. The [journal inspection guide](execution-journal.md#local-inspection-and-cutover) shows the full command. A `succeeded` execution with a pending/unknown handoff is a completed Cloud job with unresolved notification delivery, not an accepted Paperclip task.
 
