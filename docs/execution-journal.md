@@ -4,7 +4,7 @@ Issue [#4](https://github.com/bradywatkinson/paperclip-codex-factory/issues/4) r
 
 The journal uses Node's built-in `node:sqlite`, with no package dependency. The reference runtime is Node **24.15.0**, where the [SQLite module is release candidate, stability 1.2](https://nodejs.org/download/release/v24.15.0/docs/api/sqlite.html). The journal accepts Node 24.x from 24.15 onward or Node 26 and newer, and rejects Node 25. Keep the dispatcher agent's absolute Node path on a supported runtime.
 
-This change stores execution state. Cloud polling, automatic Paperclip completion, and controller-startup reconciliation remain #5 and #6. A journal row marked `running` means an accepted Cloud receipt is recorded; it is not proof that Cloud work is still executing or has succeeded.
+The journal stores dispatch state and the durable polling/notification records used by the [Cloud reconciler](cloud-reconcile.md) in #5. The reconciler preserves Paperclip task status; automatic task acceptance is not part of this slice. Controller-startup recovery remains #6. A journal row marked `running` means an accepted Cloud receipt is recorded; it is not proof that Cloud work is still executing or has succeeded.
 
 ## Storage and identity
 
@@ -35,7 +35,7 @@ Project configuration adds optional `attempt`, an integer from 1 through 100, de
 | `dispatching` | The claim committed before launching Cloud submission. The original process may still be active. A valid receipt advances it to `running`; an interrupted or ambiguous submission becomes `unknown`. |
 | `running` | A validated accepted Cloud receipt is stored. Later trusted reconciliation can record `succeeded`, `failed`, `cancelled`, or `unknown`. |
 | `unknown` | Submission or recording outcome requires investigation. Known Cloud IDs are retained. Trusted reconciliation may resolve it to `running` or a terminal state; it never returns automatically to `queued` or `dispatching`. |
-| `succeeded`, `failed`, `cancelled` | Terminal observations. They are immutable for that logical attempt. A later attempt requires a separate, explicit number. |
+| `succeeded`, `failed`, `cancelled` | Terminal execution observations. They are immutable for that logical attempt. Cloud READY can establish `succeeded`, meaning remote completion awaiting review, without accepting the work or changing Paperclip status. A later attempt requires a separate, explicit number. |
 
 The bridge does not infer Cloud failure or cancellation from a local deadline, process signal, nonzero submission exit, or malformed receipt. It retains the intent and any known ID. A new caller is not evidence that the submitting process died: the bridge checks the original Paperclip heartbeat and recovers an interrupted claim only after that heartbeat is confirmed terminal. Active, inaccessible, or unverifiable owners remain untouched and require attention.
 
@@ -45,15 +45,28 @@ The existing stdout protocol is preserved: accepted dispatch returns `status: di
 
 The database uses WAL mode, `synchronous=FULL`, `fullfsync=ON`, `checkpoint_fullfsync=ON`, foreign keys, a five-second busy timeout, prepared statements, and short `BEGIN IMMEDIATE` transactions. New directory entries, including newly created ancestors, are fsynced before journal creation; the compatibility fence and its directory are synced before submission. Network requests and CLI execution happen outside transactions. The committed dispatch claim precedes the remote call; accepted receipts are committed before the Paperclip handoff. These are requested durability mechanisms, not a physical power-loss test.
 
-Application ID `0x46434a31` identifies the database. `PRAGMA user_version` tracks current schema version **3**:
+Application ID `0x46434a31` identifies the database. `PRAGMA user_version` tracks current schema version **4**:
 
 1. Version 1 creates executions with identity, binding, state, receipt, timestamp, and error fields.
 2. Version 2 adds revisions, the active-execution uniqueness index, transition history, run associations, and legacy-import provenance. Existing version-1 rows receive initial history/run records without changing their receipt or state.
 3. Version 3 repairs untouched legacy-import snapshots whose initial event and `updatedAt` were backdated to the old guard creation time. It uses the recorded import observation time, preserving original `createdAt`/`dispatchedAt`, execution identity, state, and revision.
+4. Version 4 adds per-execution polling schedules/leases, sanitized Cloud observations, a review-notification outbox, and shared company provider-request reservations. It preserves existing execution rows and transition history.
 
 Known migrations and application/version metadata checks run inside one transaction under the writer lock. WAL activation uses a bounded busy retry after migration, so concurrent fresh openers do not combine inconsistent metadata snapshots. An unsupported future/foreign schema or a failed migration stops the operation; it is not deleted or silently recreated. Crash tests cover uncommitted transaction rollback and committed-intent survival. This does not claim recovery of metadata that never reached the controller: a Cloud task accepted just before local receipt persistence can remain unknown without a recoverable Cloud ID.
 
 Only allowlisted fields enter execution records. Arbitrary legacy extras, prompts, command arguments, raw CLI/API errors, bearer values, and credential-store contents are not copied into the journal. Error values are stable allowlisted codes; an unrecognized value becomes `UNCLASSIFIED_ERROR`.
+
+## Polling observations and notification outbox
+
+Schema 4 stores polling separately from dispatch ownership. Only due `running`/`unknown` executions with a known Cloud ID can acquire a poll lease. Queued/dispatching records and unknown submissions without IDs remain outside automatic polling. A lease has a random token, owner, and expiry; recording an observation checks that token, the deadline, and the execution revision. Expired/replaced observers and stale execution revisions cannot commit. A remote timestamp older than the latest accepted timestamp is recorded as stale without regressing execution state.
+
+Observations retain validated Cloud IDs/statuses/timestamps, the `filesChanged`/`linesAdded`/`linesRemoved` integer summary, a stable error code, error count, and next poll time. Raw Cloud title, result text, command output, and response extras are not retained. Error observations update scheduling without advancing the remote timestamp watermark or declaring execution failure. Backoff schedules are bounded; a shared company reservation enforces a minimum provider-request gap across pollers.
+
+A READY observation can atomically record execution `succeeded` and create one immutable `ready_for_review` outbox entry. The generated body contains the stored Cloud link and execution marker, with an explicit statement that final assistant output and PR metadata are unavailable. This execution result means remote completion, not verification of acceptance criteria. The deployed reconciler supports notification delivery only and preserves all Paperclip task statuses.
+
+Outbox delivery has its own token/expiry and remains inspectable after execution completion. It progresses from `pending` to `leased`, then records `sending` before a write. An expired `leased` entry can be claimed again. An expired `sending` or `unknown` entry can only be checked for an existing exact Board-authored notification; it cannot return automatically to a sendable state. A confirmed comment is `delivered`; task/scope changes can be `skipped`; ambiguous writes remain `unknown` until confirmed. All CLI/API work happens outside transactions.
+
+See [reconciler configuration, operation and ambiguous-write handling](cloud-reconcile.md) for the operator workflow. Poll leases do not discover missing dispatch receipts, cancel Cloud work, or create new attempts.
 
 ## Legacy guards and compatibility fences
 
@@ -89,7 +102,7 @@ STATE_DIR="$HOME/.paperclip/instances/factory/data/cloud-dispatch/$COMPANY_ID"
   --issue-id "$ISSUE_ID" --attempt 1
 ```
 
-`list` returns the company's execution records. `get` returns the selected execution, transition events, and associated Paperclip runs. Outputs use a `journalSchemaVersion` plus `result` envelope; failures emit a stable `JOURNAL_`-prefixed `code` and exit nonzero.
+`list` returns the company's execution records. `get` returns the selected execution, transition events, associated Paperclip runs, polling schedule, sanitized observations, and notification handoffs. Outputs use a `journalSchemaVersion` plus `result` envelope; failures emit a stable `JOURNAL_`-prefixed `code` and exit nonzero.
 
 For a cutover:
 
@@ -121,11 +134,11 @@ This changes a `dispatching` journal row to `unknown`; it **does not cancel a Cl
 Run the journal and bridge tests with Node 24.15.0:
 
 ```sh
-node --test tests/execution-journal.test.mjs tests/cloud-dispatch.test.mjs
+node --test tests/execution-journal.test.mjs tests/reconciliation-journal.test.mjs tests/cloud-dispatch.test.mjs
 node --test tests/*.test.mjs
 ```
 
-Final schema-3 validation on Node 24.15.0 passed **63/63 tests**: 28 journal, 27 bridge, and 8 baseline tests. A separate fresh-start stress check completed **160/160 opens**; an automated regression uses five rounds of six concurrent constructors against new databases.
+Historical schema-3 validation on Node 24.15.0 passed **63/63 tests**: 28 journal, 27 bridge, and 8 baseline tests. A separate fresh-start stress check completed **160/160 opens**; an automated regression uses five rounds of six concurrent constructors against new databases. Schema-4 journal validation passed **38/38 tests**: the original 28 journal tests and 10 reconciliation-journal tests. This is a local fixture result, not a live journal upgrade or notification-delivery observation.
 
 The tests use temporary journals, separate local processes, fixture HTTP APIs, and inert executables. They cover competing claims, killed processes before/after simulated remote acceptance, transaction rollback, schema upgrades/rollback, old-writer races, orphan/changed/corrupt guards, receipt uniqueness, state/revision checks, attempts, run associations, permissions, and exclusion of credentials/raw errors. They do not create real Cloud jobs or migrate live guards.
 
@@ -139,8 +152,8 @@ The original PAP-2 guard was migrated after confirming that the company's sole p
 
 The original guard, its backup, and the guard after import shared SHA-256 `a7e89d741ee8529969b89002357dddfee0c55d3b1aba21e97e4c74a2d877ce9b`. Repeated import retained the execution ID, revision 0, and one initial event. The migration made no Cloud submission and changed no Paperclip task state. `running` is deliberately the conservative interpretation of the old accepted receipt, even though PAP-2 had already been manually completed.
 
-The current implementation upgrades journal schemas through version 3. The initial live migration record above is preserved as schema-2 evidence. After a stopped journal-directory backup, the [separate schema-2 → schema-3 upgrade observation](evidence/issue-4-execution-journal/schema-upgrade.json) verified integrity and preserved the execution ID, accepted state, Cloud ID, original creation/dispatch timestamps, revision 0, one event, and the unchanged legacy guard hash.
+The current implementation upgrades journal schemas through version 4. The initial live migration record above is preserved as schema-2 evidence. After a stopped journal-directory backup, the [separate schema-2 → schema-3 upgrade observation](evidence/issue-4-execution-journal/schema-upgrade.json) verified integrity and preserved the execution ID, accepted state, Cloud ID, original creation/dispatch timestamps, revision 0, one event, and the unchanged legacy guard hash. That historical observation does not establish a live schema-4 upgrade.
 
 Schema 3 corrected `updated_at` and the initial event's `at` to the already recorded original import time, `2026-11-02T17:47:08.305Z`. It did not invent a new remote acceptance time or use the later schema-upgrade time. Repeated import preserved the complete record. The upgrade submitted no Cloud work and changed no Paperclip task state; the process dispatcher remained paused.
 
-The #3 [live dispatch evidence](evidence/issue-3-cloud-dispatch/README.md) remains a historical JSON-guard observation. Full Mac-reboot and physical power-loss recovery have not been tested. New polling and automatic completion remain #5; broader startup/restart reconciliation remains #6.
+The #3 [live dispatch evidence](evidence/issue-3-cloud-dispatch/README.md) remains a historical JSON-guard observation. Full Mac-reboot and physical power-loss recovery have not been tested. Issue #5 adds polling and status-preserving review notifications; broader startup/restart reconciliation remains #6.

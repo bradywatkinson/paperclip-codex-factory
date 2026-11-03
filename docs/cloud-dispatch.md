@@ -99,13 +99,13 @@ The child environment is allowlisted. It retains the controller's normal ChatGPT
 
 Successful submission is **not** task completion. Leaving an issue `in_progress` after a successful process exit can trigger Paperclip's corrective heartbeat and dispatch the same work again. The explicit `blocked` disposition means “waiting for the external Cloud result and reconciliation.” It is not a report that the Cloud execution failed.
 
-The bridge names the dispatcher agent as the structured unblock owner. In the installed Paperclip version, an agent-authenticated update cannot name the Board as owner; that request returns 403. Depending on runtime state, entering this self-owned blocked state may enqueue an `issue_unblock_requested` wake for that agent. No automatic self-wake was observed in the first live dispatch. A guarded re-invocation returns `already_dispatched` for the existing accepted receipt while the task is already blocked, without another PATCH or Cloud submission, so it does not itself create another unblock wake or dispatch loop. An operator can inspect the Cloud result and arrange a manual reconciliation/resume; structured unblock ownership remains with the dispatcher. Cloud polling, task completion, and automatic reconciliation belong to #5.
+The bridge names the dispatcher agent as the structured unblock owner. In the installed Paperclip version, an agent-authenticated update cannot name the Board as owner; that request returns 403. Depending on runtime state, entering this self-owned blocked state may enqueue an `issue_unblock_requested` wake for that agent. No automatic self-wake was observed in the first live dispatch. A guarded re-invocation returns `already_dispatched` for the existing accepted receipt while the task is already blocked, without another PATCH or Cloud submission, so it does not itself create another unblock wake or dispatch loop. An operator can inspect the Cloud result and arrange a manual reconciliation/resume; structured unblock ownership remains with the dispatcher. The [#5 reconciler](cloud-reconcile.md) adds polling and review notifications while preserving task status; operators retain the completion decision.
 
 The local process waits only for API setup and submission, not Cloud execution. Each API request has a 10-second limit; each CLI preflight has a 10-second limit; the dispatch deadline comes from configuration. The example uses an outer process timeout of 180 seconds and a 10-second grace period to cover preflight, a 60-second submission, and bounded setup/handoff requests (approximately 150 seconds in the slow path). The previous 90-second outer budget could interrupt otherwise valid slow setup. A local deadline does not cancel already accepted Cloud work.
 
 ## Execution journal and recovery
 
-The [execution journal](execution-journal.md), currently schema 3, is now authoritative. It lives at:
+The [execution journal](execution-journal.md), currently schema 4, is now authoritative. It lives at:
 
 ```text
 ~/.paperclip/instances/factory/data/cloud-dispatch/<companyId>/executions.sqlite
@@ -119,7 +119,7 @@ An internal `running` row means accepted Cloud work, not confirmed completion. A
 
 Deadlines, signals, output overflow, nonzero submission exits, malformed receipts, and failed accepted-handoff recording retain an unknown outcome and any known Cloud ID. `SIGTERM`/`SIGINT` stops the local CLI process group and descendants; this does not cancel Cloud work. A committed intent survives an abrupt local stop and prevents a blind retry. No raw child errors, credentials, or task prompts enter journal records.
 
-See [schema, state transitions, legacy migration, inspection, backup and cutover](execution-journal.md). Quiesce old dispatchers before migration or recovery; do not delete JSON fences or advance the attempt to bypass an unresolved submission. Automatic Cloud polling and Paperclip completion remain #5; broader startup reconciliation remains #6.
+See [schema, state transitions, legacy migration, inspection, backup and cutover](execution-journal.md). Quiesce old dispatchers before migration or recovery; do not delete JSON fences or advance the attempt to bypass an unresolved submission. The [#5 reconciler](cloud-reconcile.md) polls known accepted Cloud IDs and posts review notifications without changing Paperclip task status; broader startup reconciliation remains #6.
 
 ## Journal migration verification — 2026-11-02
 
@@ -137,7 +137,7 @@ An explicit second local wake, run `d7390bf3-07c1-45aa-b4fa-64c9f2ab52e4`, succe
 
 A [user-supplied Cloud UI screenshot](evidence/issue-3-cloud-dispatch/cloud-result-user.png) then reported `FACTORY_CLOUD_ADAPTER_OK`, checked-out branch `work`, HEAD `20145a418c4ce2034b301253df8927ec266ace9c`, the Story Keeper README heading, and read-only operation. Its [transcribed provenance](evidence/issue-3-cloud-dispatch/cloud-result-user.json) identifies this as human-supplied visual evidence, not automated final-response retrieval or proof of requested-base ancestry.
 
-After that human review, a Board operator manually completed PAP-2. The [closeout observation](evidence/issue-3-cloud-dispatch/manual-closeout.json) at `2026-11-02T16:54:47Z` records `status: done` and a null unblock descriptor. The earlier blocked snapshot remains intact in the evidence. This completion was a manual decision based on the reported Cloud result; automatic polling/reconciliation under #5 is not implemented.
+After that human review, a Board operator manually completed PAP-2. The [closeout observation](evidence/issue-3-cloud-dispatch/manual-closeout.json) at `2026-11-02T16:54:47Z` records `status: done` and a null unblock descriptor. The earlier blocked snapshot remains intact in the evidence. This completion was a manual decision based on the reported Cloud result and predates the #5 polling/notification implementation. It does not verify that later reconciler.
 
 See [the live evidence record](evidence/issue-3-cloud-dispatch/README.md) and [the sanitized Paperclip observations](evidence/issue-3-cloud-dispatch/paperclip-live.json). These verify dispatch, external-wait handoff, guarded re-invocation, user-reported output, and manual closeout. Base ancestry, PR delivery, remote failure/timeouts, and automated reconciliation remain unverified. No automatic self-wake was observed.
 

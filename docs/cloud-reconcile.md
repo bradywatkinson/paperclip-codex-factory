@@ -1,0 +1,87 @@
+# Codex Cloud polling and review notifications
+
+Issue [#5](https://github.com/bradywatkinson/paperclip-codex-factory/issues/5) adds a local reconciler for accepted Cloud executions recorded in the [execution journal](execution-journal.md). It polls the pinned CLI, records sanitized observations, and posts a review notification to Paperclip when Cloud reports READY. **It preserves every Paperclip task status.** A blocked task stays blocked until an operator reviews the result and decides what to do.
+
+The implementation is `lib/cloud-reconcile.mjs`, invoked by `scripts/cloud-reconcile.mjs`. Reference versions are Node **24.15.0**, Codex CLI **0.166.0**, and Paperclip **2026.1023.0**. It uses the supported CLIs and the local schema-4 journal; it changes no Paperclip core files. Broader controller startup recovery remains #6.
+
+## What READY establishes
+
+The observed Cloud list contract recognizes `pending` and `ready`. A pending observation keeps a known execution running; READY records the remote execution as `succeeded` and queues a notification. That journal state means the Cloud job completed and needs review. It does not verify acceptance criteria or complete the Paperclip task.
+
+The notification includes the stable `https://chatgpt.com/remote/<taskId>` link and a deterministic execution marker. The CLI does not expose the final assistant response or PR metadata. The notification says those fields are unavailable; the reconciler does not invent result text, PR links, or acceptance evidence. Summary counts describe reported file and line changes, without treating zero changes as a failure.
+
+Unknown statuses, missing tasks, malformed output, environment or URL mismatches, local command failures, and timeouts remain unresolved and use bounded retry backoff. They do not prove remote failure, cancellation, or completion. The pinned `cloud status` command's pending exit code and `cloud diff`'s empty output are not used as terminal evidence. See [the observed CLI contract](codex-cloud/README.md).
+
+## Configuration and sign-in
+
+Copy [the example](../examples/cloud-reconcile.json) to private controller configuration, outside application repositories. Replace the example user paths and company ID. `stateDir` must select the same company journal used by the dispatcher. Paths are absolute strings; no shell or `~` expansion is performed.
+
+| Field | Purpose and default |
+| --- | --- |
+| `schemaVersion` | Exactly `1`. |
+| `companyId` | Intended Paperclip company UUID. |
+| `stateDir` | Absolute company journal directory. |
+| `codexCommand` | Absolute Codex executable; defaults to `~/.local/bin/codex` resolved for the controller user. |
+| `paperclipCommand` | Absolute Paperclip CLI executable; defaults to the stable launcher `~/.local/share/paperclip-factory/bin/paperclipai`. This repository's absolute `scripts/paperclip` path also works. |
+| `apiBase` | Authenticated HTTP loopback origin, default `http://127.0.0.1:8100`. |
+| `intervalMs` | Delay between foreground passes; default `30000`. |
+| `maxRecords` | Maximum executions polled and maximum handoffs checked per pass, independently; default `10` for each phase. |
+| `maxPages` | Maximum Cloud list pages per execution and comment pages per ambiguous-delivery check; default `5`. |
+| `requestGapMs` | Shared minimum gap between provider requests; default `1000`. |
+| `commandTimeoutMs` | Per-command local deadline; default `15000`. It does not cancel remote work. |
+| `leaseMs` | Durable work-claim lifetime; default `120000`. |
+| `maxOutputBytes` | Bound on captured command output; default `256000`. |
+
+There is no task-status mode in the reconciler configuration. Delivery is notification only.
+
+Use the normal Paperclip Board CLI sign-in flow, with the same user who will run the reconciler:
+
+```sh
+./scripts/paperclip auth login --api-base http://127.0.0.1:8100 --no-browser
+```
+
+Approve the request in the browser. The Paperclip CLI manages its private credentials. Do not copy a Board token into configuration or a command argument. Codex must already report the pinned version and ChatGPT subscription sign-in. The reconciler does not dispatch work or sign in automatically.
+
+## Run one pass or poll periodically
+
+Use a supported Node executable. These example commands run from the repository root:
+
+```sh
+RECONCILE_NODE="$HOME/.local/share/paperclip-runtime-next/node_modules/node/bin/node"
+RECONCILE_CONFIG="$HOME/.paperclip/instances/factory/config/cloud-reconcile.json"
+
+"$RECONCILE_NODE" scripts/cloud-reconcile.mjs --config "$RECONCILE_CONFIG" --once
+
+"$RECONCILE_NODE" scripts/cloud-reconcile.mjs --config "$RECONCILE_CONFIG" --loop
+```
+
+`--once` performs a bounded pass. `--loop` repeats in the foreground; Control-C requests a stop after the current pass. No background service or LaunchAgent is installed automatically. Opening the journal upgrades a supported older schema, including during a one-pass run. Follow the [stopped-backup procedure](execution-journal.md#local-inspection-and-cutover) before the first run against an existing journal.
+
+Only due `running` or `unknown` records with a validated stored Cloud ID are eligible. Queued and dispatching submissions are not polled. Unknown submissions without an ID require operator investigation; the reconciler does not guess a match from titles, search for a replacement execution, or submit a retry. A later attempt still requires an explicit sequential attempt number after the previous attempt is confirmed terminal.
+
+## Durable observations and delivery
+
+Each pass runs commands serially, with one command in flight. Per-execution leases prevent competing local processes from observing the same execution concurrently. A shared company rate reservation bounds provider request frequency across processes. Commands run outside SQLite transactions. Recording a valid observation checks its lease and execution revision, then commits the observation, any terminal execution transition, and the notification outbox entry together. A stale remote timestamp cannot overwrite a newer accepted observation, and a stale observer cannot change a later operator decision.
+
+The journal persists only task identity, validated timestamps/statuses, bounded summary counts, schedules, lease metadata, stable error codes, and the fixed generated notification. It excludes raw command output, stderr, task titles, prompts, API response bodies, and credentials. Pending notification delivery is tracked separately from execution state, so a completed execution remains eligible for its undelivered notification.
+
+Before notification, the reconciler checks the current Paperclip company, project/workspace and repository binding, task assignment, and original dispatch ownership. Only an unchanged task still in `blocked` is notified. Completed/cancelled tasks, tasks already in review or another status, and changed bindings or assignees are preserved and delivery is skipped. It never changes task status or assignment. Paperclip may wake an assigned dispatcher when a Board comment is added. The dispatch bridge's journal guard prevents that wake from submitting an already accepted execution again.
+
+The outbox records `sending` durably before invoking the comment write. An expired lease that never reached `sending` can be retried. An interrupted, timed-out, or otherwise ambiguous write becomes a read-reconciliation case: **it is never automatically sent again**. Later passes search for the exact generated comment and execution marker authored by the currently signed-in Board user. A confirmed matching comment marks delivery complete. An absent or unverifiable match remains unknown for operator attention and bounded later read checks. A marker quoted by an agent is not sufficient proof of delivery; changing Board users can also prevent automatic confirmation of an earlier write.
+
+Do not delete fences, reset outbox rows, increment attempts, or rerun a comment manually merely to clear an unknown state. Inspect the existing Paperclip comments and journal evidence first. The Paperclip CLI does not expose a conditional status update or comment idempotency key, which is why this slice preserves status and refuses to replay an ambiguous write.
+
+## Inspection and verification
+
+Each CLI pass prints a JSON `status: reconciled` record with `polled`, `ready`, `notified`, `skipped`, and `unresolved` counts. Operational failures can remain unresolved with a future retry schedule; a completed pass is not proof that every notification was delivered. Startup/configuration failures emit `status: needs_attention`, a stable error code, and a nonzero exit.
+
+Use `scripts/execution-journal.mjs get` with the company, issue, and attempt to inspect execution state, polling schedule, observations, and handoffs. The [journal inspection guide](execution-journal.md#local-inspection-and-cutover) shows the full command. A `succeeded` execution with a pending/unknown handoff is a completed Cloud job with unresolved notification delivery, not an accepted Paperclip task.
+
+```sh
+node --check lib/cloud-reconcile.mjs
+node --check scripts/cloud-reconcile.mjs
+node --test tests/reconciliation-journal.test.mjs tests/cloud-reconcile.test.mjs
+node --test tests/*.test.mjs
+```
+
+Tests use disposable journals and inert CLI fixtures. Journal coverage includes concurrent claims and rate reservations, expired leases, stale timestamps/revisions, atomic READY/outbox commits, schema upgrades, safe evidence storage, and ambiguous-write fencing. These checks do not establish live notification delivery or restart/power-loss behavior. No new Cloud job is needed to verify polling of an existing accepted task; any live verification should retain its separate provenance and exclude credentials.
