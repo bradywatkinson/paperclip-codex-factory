@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+umask 077
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+cache="$HOME/.cache/paperclip-factory-go"
+output=${1:-/private/tmp/paperclip-tailnet-web}
+case "$output" in /*) ;; *) echo 'Build output must be absolute' >&2; exit 1 ;; esac
+if [ "$#" -gt 1 ]; then echo 'Usage: scripts/build-tailnet-web [ABS_OUTPUT]' >&2; exit 1; fi
+available=$(df -Pk "$HOME/.cache" | awk 'NR==2 {print $4}')
+if [ "$available" -lt 2097152 ]; then echo 'At least 2 GiB free is required' >&2; exit 1; fi
+mkdir -p "$cache/mod" "$cache/build"
+export GOMODCACHE="$cache/mod" GOCACHE="$cache/build" GOTOOLCHAIN=go1.27.3+auto
+cd "$root/tailnet-web"
+if [ -f go.sum ]; then go mod tidy -diff; else go mod tidy; fi
+go mod verify
+go test -mod=readonly -race ./...
+go build -mod=readonly -trimpath -o "$output" .
+printf '%s\n' "$output"
