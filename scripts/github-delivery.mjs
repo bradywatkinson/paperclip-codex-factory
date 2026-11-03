@@ -11,7 +11,7 @@ import { DeliveryArtifactStore } from '../lib/delivery-artifacts.mjs';
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const SHA = /^[a-f0-9]{40}$/;
-const HELP = `Usage: node scripts/github-delivery.mjs 
+const HELP = `Usage: node scripts/github-delivery.mjs
   --registry ABS_DIRECTORY --repository OWNER/REPO --state-dir EXISTING_ABS_DIRECTORY
   --company UUID --issue UUID --base IMMUTABLE_SHA --artifact-dir ABS_DIRECTORY
   [--attempt 1] [--head IMMUTABLE_SHA --pr NUMBER]
