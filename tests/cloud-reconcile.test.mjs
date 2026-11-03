@@ -88,6 +88,19 @@ test('configuration is loopback only and has bounded worker settings', () => {
   for (const patch of [{ apiBase: 'https://example.com' }, { apiBase: 'http://127.0.0.1:8100/?token=secret' }, { maxPages: 0 }, { maxRecords: 0 }, { requestGapMs: 0 }, { codexCommand: 'codex' }, { paperclipCommand: 'paperclip' }, { companyId: '../company' }, { handoffMode: 'status' }]) assert.throws(() => validateReconcileConfig({ ...base, ...patch }));
 });
 
+test('leases must outlast configured paging and handoff command budgets', () => {
+  const base = { schemaVersion: 1, companyId: COMPANY, stateDir: '/fixture/state', codexCommand: '/fixture/codex', paperclipCommand: '/fixture/paperclip' };
+  const config = validateReconcileConfig(base);
+  const budget = Math.max(config.maxPages * (config.commandTimeoutMs + config.requestGapMs), 5 * config.commandTimeoutMs) + config.requestGapMs;
+  const tooShort = error => error.code === 'RECONCILE_LEASE_TOO_SHORT';
+  assert.throws(() => validateReconcileConfig({ ...base, leaseMs: 10000 }), tooShort);
+  assert.throws(() => validateReconcileConfig({ ...base, leaseMs: budget }), tooShort);
+  assert.equal(validateReconcileConfig({ ...base, leaseMs: budget + 1 }).leaseMs, budget + 1);
+  assert.throws(() => validateReconcileConfig({ ...base, maxPages: 20 }), tooShort);
+  const extendedBudget = Math.max(20 * (config.commandTimeoutMs + config.requestGapMs), 5 * config.commandTimeoutMs) + config.requestGapMs;
+  assert.equal(validateReconcileConfig({ ...base, maxPages: 20, leaseMs: extendedBudget + 1 }).leaseMs, extendedBudget + 1);
+});
+
 test('Cloud pages accept nullable environments and reject malformed task identity', () => {
   assert.equal(parseCloudPage(JSON.stringify({ tasks: [cloudTask()], cursor: null })).tasks[0].id, CLOUD);
   for (const value of ['not json', '{}', JSON.stringify({ tasks: {}, cursor: null }), JSON.stringify({ tasks: [cloudTask({ id: '../task' })], cursor: null })]) assert.throws(() => parseCloudPage(value));
