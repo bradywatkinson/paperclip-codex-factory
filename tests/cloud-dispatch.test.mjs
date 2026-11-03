@@ -432,6 +432,23 @@ test('one self-owned blocked wake returns the prior dispatch without another pat
   assert.equal(wake.apiCalls.filter(call => call.method === 'PATCH').length, 0);
 });
 
+test('a reconciliation notification wake reuses a ready execution without a patch or Cloud submission', async t => {
+  const stateDir = await temporary(t);
+  await dispatchFromPaperclip({ config, context, stateDir, ...fixture() });
+  const journal = new ExecutionJournal({ directory: stateDir, companyId: COMPANY });
+  try {
+    const record = journal.get(ISSUE);
+    journal.transition(ISSUE, { expectedState: record.state, expectedRevision: record.revision, toState: 'succeeded' });
+  } finally { journal.close(); }
+  const wake = fixture({ issue: { ...task, status: 'blocked' }, runId: OTHER });
+  const receipt = await dispatchFromPaperclip({ config, context: { ...context, runId: OTHER }, stateDir, ...wake });
+  assert.equal(receipt.status, 'review_pending');
+  assert.equal(receipt.executionState, 'succeeded');
+  assert.equal(receipt.cloudTaskId, TASK_ID);
+  assert.equal(cloudCommands(wake).length, 0);
+  assert.equal(wake.apiCalls.some(call => call.method === 'PATCH' || call.pathname.endsWith('/checkout')), false);
+});
+
 test('mapping changes and corrupted guard records cannot trigger a second submission', async t => {
   const stateDir = await temporary(t);
   const initial = fixture();
