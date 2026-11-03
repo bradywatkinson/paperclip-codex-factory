@@ -19,7 +19,7 @@ try {
     const result = await reconcileOnce({ config, journal, shouldStop: () => stopped,
       sleep: async ms => { try { await delay(ms, undefined, { signal: cancellation.signal }); } catch { /* Stop interrupts rate waits. */ } },
     });
-    console.log(JSON.stringify({ status: result.unresolved ? 'needs_attention' : 'reconciled', ...result }));
+    console.log(JSON.stringify({ status: result.unresolved || result.paused || result.providerRetryAt ? 'needs_attention' : 'reconciled', ...result }));
     if (args[2] === '--once' || stopped) break;
     // Short sleeps allow a prompt stop between cycles.
     for (let remaining = config.intervalMs; remaining > 0 && !stopped; remaining -= 250) await delay(Math.min(remaining, 250));
