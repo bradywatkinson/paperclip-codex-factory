@@ -143,3 +143,45 @@ test('unknown submissions need a validated receipt before polling can resume', a
   assert.equal(resumed.record.attempt, 1);
   assert.equal(journal.listPollable({ now: AT })[0].cloudTaskId, CLOUD);
 });
+
+test('a stale poll inventory cannot bypass a retry limit reached by another controller', async t => {
+  const { journal, directory, record } = await fixture(t);
+  const before = { record: journal.get(ISSUE), events: journal.events(ISSUE), runs: journal.runs(ISSUE), fence: await fs.readFile(path.join(directory, ISSUE + '.json')) };
+  const snapshot = journal.listPollable({ now: AT, maxErrorCount: 1 });
+  assert.equal(snapshot.length, 1);
+  const competitor = new ExecutionJournal({ directory, companyId: COMPANY });
+  try {
+    const lease = competitor.claimPoll(record.executionId, { ownerId: OWNER, now: AT, leaseMs: 1000, maxErrorCount: 1 });
+    competitor.recordObservation({ executionId: record.executionId, token: lease.token, expectedRevision: lease.record.revision,
+      now: AT, nextPollAt: later(1000), errorCount: 1, observation: { cloudTaskId: CLOUD, errorCode: 'CLOUD_CLI_FAILED' } });
+    assert.equal(journal.polling(record.executionId).errorCount, 1);
+    assert.equal(journal.claimPoll(snapshot[0].executionId, { ownerId: OTHER_COMPANY, now: later(2000), leaseMs: 1000, maxErrorCount: 1 }), null);
+    assert.deepEqual(journal.listPollable({ now: later(2000), maxErrorCount: 1 }), []);
+    assert.equal(journal.listPollable({ now: later(2000) })[0].executionId, record.executionId, 'Inspection can still enumerate the paused record');
+    journal.resumePolling(record.executionId, { now: later(2000) });
+    assert.ok(journal.claimPoll(snapshot[0].executionId, { ownerId: OTHER_COMPANY, now: later(2000), leaseMs: 1000, maxErrorCount: 1 }));
+    assert.deepEqual(journal.get(ISSUE), before.record);
+    assert.deepEqual(journal.events(ISSUE), before.events);
+    assert.deepEqual(journal.runs(ISSUE), before.runs);
+    assert.deepEqual(await fs.readFile(path.join(directory, ISSUE + '.json')), before.fence);
+    assert.equal(journal.list().length, 1);
+  } finally { competitor.close(); }
+});
+
+test('paused records are filtered before the inventory limit so later due work is not starved', async t => {
+  const { journal, record: paused } = await fixture(t);
+  errorObservation(journal, paused, { errorCount: 1, nextPollAt: later(1000) });
+  const secondIdentity = { ...identity, paperclipIssueId: OTHER_COMPANY };
+  const cloudTaskId = 'task_e_fedcba9876543210fedcba9876543210';
+  journal.queue(secondIdentity);
+  journal.claim(secondIdentity.paperclipIssueId, RUN);
+  const due = journal.accept(secondIdentity.paperclipIssueId, RUN, { cloudTaskId, emittedUrl: 'https://chatgpt.com/codex/tasks/' + cloudTaskId, taskUrl: 'https://chatgpt.com/remote/' + cloudTaskId });
+  const lease = journal.claimPoll(due.executionId, { ownerId: OWNER, now: AT, leaseMs: 1000 });
+  journal.recordObservation({ executionId: due.executionId, token: lease.token, expectedRevision: due.revision, now: AT, nextPollAt: later(2000),
+    observation: { cloudTaskId, status: 'pending', cloudUpdatedAt: AT } });
+  assert.equal(journal.listPollable({ now: later(3000), limit: 1 })[0].executionId, paused.executionId, 'The exhausted record is first without the retry ceiling');
+  const selected = journal.listPollable({ now: later(3000), limit: 1, maxErrorCount: 1 });
+  assert.equal(selected.length, 1);
+  assert.equal(selected[0].executionId, due.executionId);
+  assert.ok(journal.claimPoll(selected[0].executionId, { ownerId: OWNER, now: later(3000), leaseMs: 1000, maxErrorCount: 1 }));
+});
