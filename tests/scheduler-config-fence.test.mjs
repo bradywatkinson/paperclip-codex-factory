@@ -27,7 +27,7 @@ test('legacy stores gain the additive fence table without changing history or co
   scheduler.confirmTerminal(terminal.executionId, { expectedRevision: terminal.revision, evidence: { ...terminal, state: 'cancelled' }, now: NOW });
   scheduler.setPaused(true, { now: NOW });
   const settings = scheduler.settings(), repositories = scheduler.repositories(), executions = scheduler.list(), events = scheduler.events();
-  scheduler.db.exec('DROP TABLE scheduler_configuration_fences');
+  scheduler.db.exec('DROP TABLE scheduler_configuration_fences; PRAGMA user_version=1;');
   const reopened = new DispatchScheduler({ directory });
   try {
     assert.equal(reopened.configurationFence(REPOSITORY), null);
@@ -38,7 +38,7 @@ test('legacy stores gain the additive fence table without changing history or co
     assert.deepEqual(reopened.repositories(), repositories);
     assert.deepEqual(reopened.list(), executions);
     assert.deepEqual(reopened.events(), events);
-    assert.equal(reopened.db.prepare('PRAGMA user_version').get().user_version, 1);
+    assert.equal(reopened.db.prepare('PRAGMA user_version').get().user_version, 2);
   } finally { reopened.close(); }
 });
 
