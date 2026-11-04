@@ -6,6 +6,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import test from 'node:test';
+import { DatabaseSync } from 'node:sqlite';
 import { RepositoryRegistry } from '../lib/repository-registry.mjs';
 import { DispatchScheduler } from '../lib/dispatch-scheduler.mjs';
 import { manageControllerService, planControllerService, validateControllerServiceConfig, controllerServiceEnvironment, CONTROLLER_SERVICE_LABEL } from '../lib/controller-service.mjs';
@@ -69,6 +70,43 @@ test('owned installation is exact, private, idempotent and has no credentials or
   assert.ok(env.PATH.startsWith(path.dirname(process.execPath)));
   assert.equal(env.PAPERCLIP_INSTANCE_ID, 'factory');
   assert.equal(f.state.calls.some(call => call.args.includes('sh') || call.args.includes('-c')), false);
+});
+
+test('installation accepts supported legacy/current registry and scheduler schemas without migrating them', async t => {
+  for (const registryVersion of [1, 2]) for (const schedulerVersion of [1, 2]) await t.test(`registry ${registryVersion}, scheduler ${schedulerVersion}`, async t => {
+    const f = fixture(t), names = [path.join(f.config.registryDirectory, 'registry.sqlite'), path.join(f.config.schedulerDirectory, 'dispatch-scheduler.sqlite')];
+    for (const [index, version] of [registryVersion, schedulerVersion].entries()) {
+      const db = new DatabaseSync(names[index]);
+      try { if (version === 1) db.exec(`DROP TABLE ${index === 0 ? 'configuration_updates' : 'scheduler_configuration_fences'}; PRAGMA user_version=1;`); } finally { db.close(); }
+    }
+    const before = names.map(filename => fs.readFileSync(filename));
+    assert.equal((await f.invoke('install')).status, 'installed');
+    for (const [index, filename] of names.entries()) {
+      assert.deepEqual(fs.readFileSync(filename), before[index]);
+      const db = new DatabaseSync(filename, { readOnly: true });
+      try { assert.equal(db.prepare('PRAGMA user_version').get().user_version, index === 0 ? registryVersion : schedulerVersion); } finally { db.close(); }
+    }
+  });
+});
+
+test('foreign, future, incomplete and uninitialized database contracts reject before native control or publication', async t => {
+  for (const [name, scheduler, mutation] of [
+    ['future registry', false, 'PRAGMA user_version=3'],
+    ['future scheduler', true, 'PRAGMA user_version=3'],
+    ['foreign registry application', false, 'PRAGMA application_id=1234'],
+    ['foreign scheduler application', true, 'PRAGMA application_id=1234'],
+    ['uninitialized registry', false, 'PRAGMA user_version=0'],
+    ['missing registry update table', false, 'DROP TABLE configuration_updates'],
+    ['missing scheduler fence table', true, 'DROP TABLE scheduler_configuration_fences'],
+    ['incomplete scheduler fence columns', true, 'ALTER TABLE scheduler_configuration_fences DROP COLUMN next_hash'],
+    ['missing scheduler settings', true, 'DELETE FROM scheduler_settings'],
+  ]) await t.test(name, async t => {
+    const f = fixture(t), filename = path.join(scheduler ? f.config.schedulerDirectory : f.config.registryDirectory, scheduler ? 'dispatch-scheduler.sqlite' : 'registry.sqlite');
+    const db = new DatabaseSync(filename); try { db.exec(mutation); } finally { db.close(); }
+    await assert.rejects(f.invoke('install'), { code: 'CONTROLLER_SERVICE_DATABASE_UNSUPPORTED' });
+    assert.equal(fs.existsSync(f.plan.privateDirectory), false); assert.equal(fs.existsSync(f.plan.plistPath), false);
+    assert.equal(f.state.calls.some(call => call.command === '/bin/launchctl'), false);
+  });
 });
 
 test('plist path escaping is XML-safe and accepted by the platform plist linter when present', t => {
