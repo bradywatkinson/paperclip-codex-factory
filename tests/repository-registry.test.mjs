@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { RepositoryRegistry } from '../lib/repository-registry.mjs';
+import { RepositoryRegistry, validateConfigurationUpdate } from '../lib/repository-registry.mjs';
 
 const config = () => ({ schemaVersion: 1, repository: 'example/project', defaultBranch: 'main', cloud: { environmentId: 'a'.repeat(32) }, commands: { test: { argv: ['node', '--test'], timeoutMs: 60_000 } } });
 async function setup(t) {
@@ -49,4 +49,44 @@ test('bootstrap cannot start against stale or absent registration', async t => {
   assert.throws(() => registry.beginOperation('example/project', { expectedConfigHash: 'stale' }), { code: 'REGISTRY_CONFIG_CHANGED' });
   assert.throws(() => registry.beginOperation('example/missing', { expectedConfigHash: 'stale' }), { code: 'REGISTRY_CONFIG_CHANGED' });
   assert.equal(registry.getOperation('example/project'), null);
+});
+
+test('configuration update scope preserves all existing checks and every other effective field', async t => {
+  const { registry } = await setup(t);
+  const { registration } = registry.register({ ...config(), delivery: { requiredChecks: ['receipt'] } }, { sourcePath: '/fixture/.factory.yaml' });
+  const candidate = { ...registration.config, delivery: { ...registration.config.delivery, requiredChecks: ['receipt', 'application tests'] } };
+  assert.deepEqual(validateConfigurationUpdate(registration, candidate), candidate);
+  for (const bad of [
+    { ...candidate, defaultBranch: 'other' },
+    { ...candidate, cloud: { environmentId: 'b'.repeat(32) } },
+    { ...candidate, commands: { test: { argv: ['other'], timeoutMs: 60_000 } } },
+    { ...candidate, delivery: { ...candidate.delivery, requiredChecks: ['application tests'] } },
+  ]) assert.throws(() => validateConfigurationUpdate(registration, bad), { code: 'CONFIGURATION_UPDATE_SCOPE_UNSUPPORTED' });
+  assert.deepEqual(registry.get(registration.repository), registration);
+});
+
+test('configuration guard rejects stale and updating registrations before staging review writes', async t => {
+  const { registry } = await setup(t);
+  const { registration } = registry.register(config(), { sourcePath: '/fixture/.factory.yaml' });
+  const operation = registry.beginOperation(registration.repository, { expectedConfigHash: registration.configHash, state: 'configured' });
+  let calls = 0;
+  assert.equal(registry.withConfigurationGuard(registration.repository, registration.configHash, () => ++calls), 1);
+  assert.throws(() => registry.withConfigurationGuard(registration.repository, 'a'.repeat(64), () => ++calls), { code: 'REGISTRY_CONFIG_CHANGED' });
+  registry.updateOperation(registration.repository, { expectedRevision: operation.revision, state: 'configuration_updating', data: {} });
+  assert.throws(() => registry.withConfigurationGuard(registration.repository, registration.configHash, () => ++calls), { code: 'REGISTRY_CONFIG_CHANGED' });
+  assert.equal(calls, 1);
+});
+
+test('schema-one registry upgrade preserves configured bindings and registration bytes', async t => {
+  const { directory, registry } = await setup(t);
+  const { registration } = registry.register(config(), { sourcePath: '/fixture/.factory.yaml' });
+  const operation = registry.beginOperation(registration.repository, { expectedConfigHash: registration.configHash, state: 'configured', data: { operationId: 'preserved-id', projectId: 'preserved-project' } });
+  registry.database.exec('DROP TABLE configuration_updates; PRAGMA user_version=1;');
+  const reader = new RepositoryRegistry({ directory });
+  try {
+    assert.deepEqual(reader.get(registration.repository), registration);
+    assert.deepEqual(reader.getOperation(registration.repository), operation);
+    assert.equal(reader.database.prepare('PRAGMA user_version').get().user_version, 2);
+    assert.equal(reader.getConfigurationUpdate(registration.repository), null);
+  } finally { reader.close(); }
 });
