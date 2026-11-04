@@ -7,6 +7,23 @@ import { ExecutionJournal } from '../lib/execution-journal.mjs';
 import { dispatchFromPaperclip } from '../lib/cloud-dispatch.mjs';
 import { buildReviewInteraction, parseCloudPage, reconcileOnce, validateReconcileConfig } from '../lib/cloud-reconcile.mjs';
 
+async function assertPrivateFixtureBytes(directory, forbidden) {
+  const pending = [{ directory, depth: 0 }]; let entries = 0;
+  while (pending.length) {
+    const current = pending.pop(); assert.ok(current.depth <= 16, 'Fixture scan must remain bounded');
+    for (const name of await fs.readdir(current.directory)) {
+      assert.ok(++entries <= 1000, 'Fixture scan must remain bounded');
+      const filename = path.join(current.directory, name), stat = await fs.lstat(filename);
+      assert.equal(stat.isSymbolicLink(), false, 'Privacy fixture must not redirect its scan');
+      if (stat.isDirectory()) pending.push({ directory: filename, depth: current.depth + 1 });
+      else {
+        assert.equal(stat.isFile(), true, 'Every non-directory fixture entry must be inspected');
+        assert.equal((await fs.readFile(filename)).includes(Buffer.from(forbidden)), false);
+      }
+    }
+  }
+}
+
 const COMPANY = '11111111-1111-4111-8111-111111111111';
 const ISSUE = '22222222-2222-4222-8222-222222222222';
 const RUN = '33333333-3333-4333-8333-333333333333';
@@ -273,9 +290,7 @@ test('provider errors preserve the receipt and defer polling with backoff', asyn
   assert.ok(poll.nextPollAt > NOW);
   await invoke(context, f);
   assert.equal(cloudCalls(f).length, 1);
-  for (const name of await fs.readdir(context.directory)) {
-    assert.equal((await fs.readFile(path.join(context.directory, name))).includes(Buffer.from('SECRET_PROVIDER_STDERR')), false);
-  }
+  await assertPrivateFixtureBytes(context.directory, 'SECRET_PROVIDER_STDERR');
 });
 
 test('bounded pagination finds a later receipt and sends its review notification', async t => {

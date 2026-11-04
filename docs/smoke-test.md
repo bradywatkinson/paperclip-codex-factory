@@ -38,9 +38,9 @@ Record observed results rather than checking off expected behavior. Redact passw
 
 | Check | Status | Evidence |
 | --- | --- | --- |
-| Pinned selected install and doctor | Blocked | Initial install hit `ENOSPC`; no live server or doctor verified |
+| Pinned selected install and doctor | Passed | [Dated bootstrap follow-up](evidence/2026-10-31-bootstrap.md): pinned global install completed; doctor exited 0 with 12 checks. Earlier `ENOSPC` was resolved. |
 | Loopback binding and health | Passed | Healthy API; lsof confirms 127.0.0.1:8100 only |
-| Human login and anonymous denial | Pending | UI serves; anonymous company request denied403 during bootstrap; first-owner account still pending |
+| Human login and anonymous denial | Partial | Anonymous company request denied403 during bootstrap; [2026-11-03 preflight](evidence/issue-7-cloud-execution-demo.md) confirms saved Board authentication works. Fresh interactive login acceptance remains unverified. |
 | Goal and task persistence | Pending | Await browser check |
 | Agent assignment | Pending | Await browser check |
 | Approval and rejection | Pending | Await pending-request workflow |

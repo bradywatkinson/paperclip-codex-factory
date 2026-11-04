@@ -3,12 +3,13 @@ import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs/promises';
+import syncFs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
   ExecutionJournal, JOURNAL_FILENAME, JOURNAL_APPLICATION_ID,
-  JOURNAL_SCHEMA_VERSION, JOURNAL_MIGRATIONS,
+  JOURNAL_SCHEMA_VERSION, JOURNAL_MIGRATIONS, FENCE_STAGING_DIRECTORY,
 } from '../lib/execution-journal.mjs';
 
 const COMPANY = '11111111-1111-4111-8111-111111111111';
@@ -62,11 +63,14 @@ async function sqliteDoesNotContain(directory, forbidden) {
     }
   }
 }
-async function waitFor(file, deadlineMs = 5000) {
+async function waitFor(file, deadlineMs = 5000, expected) {
   const until = Date.now() + deadlineMs;
   while (true) {
-    try { await fs.access(file); return; }
-    catch { if (Date.now() >= until) throw new Error('Child fixture did not reach its barrier'); }
+    try {
+      if (expected === undefined) { await fs.access(file); return; }
+      if (await fs.readFile(file, 'utf8') === expected) return;
+    } catch { /* Wait until the complete fixture marker has been published. */ }
+    if (Date.now() >= until) throw new Error('Child fixture did not reach its barrier');
     await new Promise(resolve => setTimeout(resolve, 10));
   }
 }
@@ -165,6 +169,66 @@ test('ambiguous outcomes retain known Cloud IDs and cannot be claimed again', as
   assert.throws(() => journal.queue({ ...identity, attempt: 2, paperclipRunId: RUN2 }));
   assert.throws(() => journal.transition(ISSUE, { attempt: 1, expectedState: 'unknown', expectedRevision: unknown.revision, toState: 'queued' }));
   assert.equal(journal.get(ISSUE).cloudTaskId, CLOUD);
+});
+
+test('a partial fence write and ENOSPC never publish a poisoned final guard; the same execution can retry', async t => {
+  const { directory, journal } = await withJournal(t);
+  const original = journal.queue(identity), write = syncFs.writeFileSync;
+  let injected = false;
+  const mock = t.mock.method(syncFs, 'writeFileSync', (target, data, ...options) => {
+    if (!injected && typeof target === 'number' && typeof data === 'string' && data.includes('"journalExecutionId"')) {
+      injected = true; write(target, data.slice(0, 17), ...options);
+      throw Object.assign(new Error('fixture disk full'), { code: 'ENOSPC' });
+    }
+    return write(target, data, ...options);
+  });
+  try { assert.throws(() => journal.claim(ISSUE, RUN), { code: 'JOURNAL_FENCE_FAILED' }); }
+  finally { mock.mock.restore(); }
+  assert.equal(injected, true);
+  await assert.rejects(fs.stat(path.join(directory, ISSUE + '.json')), { code: 'ENOENT' });
+  assert.equal(journal.get(ISSUE).state, 'queued');
+  const next = journal.claim(ISSUE, RUN2);
+  assert.equal(next.claimed, true); assert.equal(next.record.executionId, original.executionId);
+  const guard = JSON.parse(await fs.readFile(path.join(directory, ISSUE + '.json'), 'utf8'));
+  assert.equal(guard.journalExecutionId, original.executionId);
+  assert.deepEqual(await fs.readdir(path.join(directory, FENCE_STAGING_DIRECTORY)), []);
+});
+
+test('a competing claimant never sees partial final bytes while another process is staging a fence', async t => {
+  const directory = await temporary(t), initial = open(directory);
+  const original = initial.queue(identity); initial.close();
+  const source = `import fs from 'node:fs';import {ExecutionJournal} from ${JSON.stringify(moduleUrl)};const[d,c,i,r]=process.argv.slice(1);const write=fs.writeFileSync;fs.writeFileSync=(target,data,...options)=>{if(typeof target==='number'&&typeof data==='string'&&data.includes('"journalExecutionId"')){write(target,data.slice(0,17),...options);const fd=fs.openSync(d+'/staged-partial','wx');write(fd,'partial');fs.fsyncSync(fd);fs.closeSync(fd);Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);}return write(target,data,...options);};const j=new ExecutionJournal({directory:d,companyId:c});j.claim(i,r);console.log('SUBMISSION_BOUNDARY');`;
+  const worker = child(source, [directory, COMPANY, ISSUE, RUN], directory);
+  t.after(() => worker.process.kill('SIGKILL'));
+  await waitFor(path.join(directory, 'staged-partial'), 5000, 'partial');
+  await assert.rejects(fs.stat(path.join(directory, ISSUE + '.json')), { code: 'ENOENT' });
+  const competitor = open(directory);
+  try {
+    const claim = competitor.claim(ISSUE, RUN2);
+    assert.equal(claim.claimed, true); assert.equal(claim.record.executionId, original.executionId);
+    const guard = JSON.parse(await fs.readFile(path.join(directory, ISSUE + '.json'), 'utf8'));
+    assert.equal(guard.journalExecutionId, original.executionId);
+  } finally { competitor.close(); }
+  worker.process.kill('SIGKILL'); const stopped = await worker.closed;
+  assert.equal(stopped.stdout.includes('SUBMISSION_BOUNDARY'), false);
+  const staged = await fs.readdir(path.join(directory, FENCE_STAGING_DIRECTORY));
+  assert.equal(staged.length, 1);
+  assert.equal((await fs.readFile(path.join(directory, FENCE_STAGING_DIRECTORY, staged[0]))).length, 17);
+});
+
+test('a different publisher removing its staged file during inspection does not reject a valid claim', async t => {
+  const { directory, journal } = await withJournal(t); journal.queue(identity);
+  const staging = path.join(directory, FENCE_STAGING_DIRECTORY); await fs.mkdir(staging);
+  const abandoned = path.join(staging, randomUUID() + '.tmp'); await fs.writeFile(abandoned, 'partial');
+  const lstat = syncFs.lstatSync;
+  let removed = false;
+  const mock = t.mock.method(syncFs, 'lstatSync', (target, ...options) => {
+    if (!removed && target === abandoned) { removed = true; syncFs.unlinkSync(abandoned); }
+    return lstat(target, ...options);
+  });
+  try { assert.equal(journal.claim(ISSUE, RUN).claimed, true); }
+  finally { mock.mock.restore(); }
+  assert.equal(removed, true);
 });
 
 test('interrupted dispatch recovery is sticky and does not become a new queued submission', async t => {
@@ -360,7 +424,7 @@ test('a crash after simulated remote acceptance preserves ambiguity without inve
   const source = `import fs from 'node:fs';import {ExecutionJournal} from ${JSON.stringify(moduleUrl)};const[d,c,i,r,id]=process.argv.slice(1);const j=new ExecutionJournal({directory:d,companyId:c});j.claim(i,r);fs.writeFileSync(d+'/remote-accepted',id);Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);`;
   const proc = child(source, [directory, COMPANY, ISSUE, RUN, CLOUD], directory);
   t.after(() => proc.process.kill('SIGKILL'));
-  await waitFor(path.join(directory, 'remote-accepted'));
+  await waitFor(path.join(directory, 'remote-accepted'), 5000, CLOUD);
   proc.process.kill('SIGKILL'); await proc.closed;
   assert.equal(await fs.readFile(path.join(directory, 'remote-accepted'), 'utf8'), CLOUD);
   const recovered = open(directory);
@@ -571,7 +635,7 @@ test('legacy files cannot overwrite an execution that has already been claimed o
 test('new directory ancestry is synced before journal creation, including a trailing-slash state path', async t => {
   const base = await temporary(t);
   const directory = path.join(base, 'new', 'nested', 'journal');
-  const source = `import fs from 'node:fs';import path from 'node:path';import {ExecutionJournal} from ${JSON.stringify(moduleUrl)};const[d,c,raw]=process.argv.slice(1);const events=[],fds=new Map();const originalOpen=fs.openSync,originalSync=fs.fsyncSync,originalClose=fs.closeSync;fs.openSync=(name,...args)=>{const fd=originalOpen(name,...args);if(typeof name==='string'){const file=path.resolve(name);fds.set(fd,file);events.push({type:'open',path:file,flags:args[0]});}return fd;};fs.fsyncSync=fd=>{events.push({type:'sync',path:fds.get(fd)});return originalSync(fd);};fs.closeSync=fd=>{fds.delete(fd);return originalClose(fd);};const j=new ExecutionJournal({directory:d,companyId:c});j.queue(JSON.parse(raw));j.claim(JSON.parse(raw).paperclipIssueId,JSON.parse(raw).paperclipRunId);events.push({type:'submission-boundary'});j.close();console.log(JSON.stringify(events));`;
+  const source = `import fs from 'node:fs';import path from 'node:path';import {ExecutionJournal} from ${JSON.stringify(moduleUrl)};const[d,c,raw]=process.argv.slice(1);const events=[],fds=new Map();const originalOpen=fs.openSync,originalSync=fs.fsyncSync,originalClose=fs.closeSync,originalLink=fs.linkSync;fs.openSync=(name,...args)=>{const fd=originalOpen(name,...args);if(typeof name==='string'){const file=path.resolve(name);fds.set(fd,file);events.push({type:'open',path:file,flags:args[0]});}return fd;};fs.fsyncSync=fd=>{events.push({type:'sync',path:fds.get(fd)});return originalSync(fd);};fs.closeSync=fd=>{fds.delete(fd);return originalClose(fd);};fs.linkSync=(source,target)=>{events.push({type:'link',source:path.resolve(source),path:path.resolve(target)});return originalLink(source,target);};const j=new ExecutionJournal({directory:d,companyId:c});j.queue(JSON.parse(raw));j.claim(JSON.parse(raw).paperclipIssueId,JSON.parse(raw).paperclipRunId);events.push({type:'submission-boundary'});j.close();console.log(JSON.stringify(events));`;
   const worker = child(source, [directory + path.sep, COMPANY, JSON.stringify(identity)], base);
   t.after(() => worker.process.kill('SIGKILL'));
   let timeout;
@@ -588,7 +652,10 @@ test('new directory ancestry is synced before journal creation, including a trai
   }
   const boundary = events.findIndex(event => event.type === 'submission-boundary');
   const fence = path.join(directory, ISSUE + '.json');
-  assert.ok(events.some((event, index) => index < boundary && event.type === 'sync' && event.path === fence));
+  const publication = events.findIndex(event => event.type === 'link' && event.path === fence);
+  assert.ok(publication > 0 && publication < boundary);
+  assert.ok(events.some((event, index) => index < publication && event.type === 'sync' && event.path === events[publication].source));
+  assert.ok(events.some((event, index) => index > publication && index < boundary && event.type === 'sync' && event.path === directory));
   // This verifies the requested filesystem ordering, not a physical power-loss experiment.
 });
 

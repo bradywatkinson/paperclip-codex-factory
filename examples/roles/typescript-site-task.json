@@ -1,0 +1,16 @@
+{
+  "role": "implementer",
+  "templateVersion": 1,
+  "repository": "example/typescript-site",
+  "branch": "develop",
+  "baseSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "task": {
+    "id": "b22b2222-2222-4222-8222-222222222222",
+    "title": "Reserve static list route slugs",
+    "description": "A newly created list named All must get all-1 so /lists/all continues to address the static see-all route. Preserve owned reservation and duplicate numbering; do not migrate existing rows. Test newly created list slugs and report the immutable starting commit and exact test outcomes."
+  },
+  "commands": { "test": { "argv": ["bun", "run", "test", "--", "convex/collections.test.ts"], "timeoutMs": 180000 }, "lint": { "argv": ["bun", "run", "lint"], "timeoutMs": 600000 } },
+  "delivery": { "requiredChecks": ["unit-tests", "lint"], "requireIndependentReview": true, "requireHumanApproval": true, "autoMerge": false, "deploy": false },
+  "attempt": 1,
+  "maxAttempts": 3
+}
