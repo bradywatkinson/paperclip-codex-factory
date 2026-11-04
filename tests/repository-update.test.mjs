@@ -213,6 +213,12 @@ test('every persisted update checkpoint resumes the exact intent without duplica
     assert.throws(() => f.scheduler.assertConfiguration(f.repository, f.registration.configHash), { code: 'SCHEDULER_CONFIGURATION_UPDATING' });
     const intent = f.registry.getConfigurationUpdate(f.repository);
     if (stage === 'fenced') assert.equal(intent, null); else assert.equal(intent.updateId, fence.updateId);
+    if (stage === 'fenced' || stage === 'committed') {
+      const current = f.registry.get(f.repository), interrupted = snapshot(f);
+      await assert.rejects(f.update({ config: current.config, expectedConfigHash: current.configHash, dryRun: false }), { code: 'CONFIGURATION_UPDATE_CONFLICT' });
+      assert.deepEqual(snapshot(f), interrupted);
+      assert.deepEqual(f.scheduler.configurationFence(f.repository), fence);
+    }
     const result = await f.update({ dryRun: false });
     assert.equal(result.status, 'updated'); assert.equal(result.updateId, fence.updateId);
     assert.equal(f.scheduler.configurationFence(f.repository).state, 'ready');
@@ -221,6 +227,8 @@ test('every persisted update checkpoint resumes the exact intent without duplica
     assert.deepEqual([...f.agents.keys()], agents); assert.deepEqual(f.journal.list(), before.executions); assert.deepEqual(f.scheduler.list(), before.scheduler);
     assert.equal(f.scheduler.settings().paused, true); assertReadOnlyCalls(f);
     assert.equal((await f.update({ dryRun: false })).status, 'already_updated');
+    const stable = snapshot(f), noop = await f.update({ expectedConfigHash: configurationHash(f.config), dryRun: false });
+    assert.equal(noop.status, 'unchanged'); assert.deepEqual(snapshot(f), stable);
   });
 });
 
