@@ -65,7 +65,7 @@ Copy [the policy example](../examples/repositories/factory-policy.yaml) into own
 
 The default policy requires independent review and human approval, disables automatic merge and deployment, allows at most 2 global active executions, 1 active execution per repository, 3 attempts, and a command timeout of at most 3,600,000 ms. Repository overrides may lower ceilings or add check names. They cannot remove central checks, raise ceilings, disable review/approval, or enable merge/deployment. Even central policy cannot turn on those unsafe gates in schema v1.
 
-The resolved policy is normalized into the registered configuration and also retained as a separate policy snapshot. Registration uses canonical content hashes: identical effective configuration and policy are idempotent; a changed repository/environment/branch/policy binding is rejected rather than silently replaced. Changing the policy file later does not retroactively rewrite an existing registration. Runtime account-wide scheduling and delivery-gate enforcement are separate responsibilities, not established by this configuration layer.
+The resolved policy is normalized into the registered configuration and also retained as a separate policy snapshot. Registration uses canonical content hashes: identical effective configuration and policy are idempotent; a changed repository/environment/branch/policy binding is rejected rather than silently replaced. Changing the policy file later does not retroactively rewrite an existing registration. The [scoped update procedure](#add-required-ci-checks-to-a-configured-repository) can strengthen the registered required-check list while retaining every other normalized field and the existing policy snapshot. Runtime account-wide scheduling and delivery-gate enforcement are separate responsibilities, not established by this configuration layer.
 
 ## Operator commands
 
@@ -125,6 +125,48 @@ A SQLite operation record commits creation intent before each external write. Pr
 Ownership is read through `agent get`. The pinned release deliberately omits metadata from `agent configuration`; that response independently verifies the same agent identity, status, adapter and heartbeat fields.
 
 `configured` means these bindings/configuration were provisioned and inspected. `repo status` explicitly reports `operationalVerified: false`. The outstanding gates remain remote execution, configured command outcomes, CI, independent review, human approval, and global concurrency. The generated dispatcher validates the registered repository/environment/branch/policy and consumes commands/gates through the implementer role; injecting instructions does not machine-verify that remote checks ran or passed. Role reports remain agent claims until separately verified. No complete automatic review/repair pipeline or recovery-controller service is installed by bootstrap.
+
+### Add required CI checks to a configured repository
+
+`factory repo update` is a scoped, local configuration update for an already configured repository. Its first version permits **additions to `delivery.requiredChecks` only**: the candidate must retain every current effective required check, and every other normalized field and the registered central policy must remain unchanged. Removing checks, changing commands or budgets, or replacing repository/environment/branch bindings is unsupported. There is no force flag. Editing the source YAML alone does not update a registered dispatcher, and deleting/re-registering private state is not an update procedure.
+
+Choose checks that actually run the intended application tests at the PR head. A marker such as Story Keeper's `receipt` is evidence of workflow presence/freshness, not application-test success. Retain it when adding real test checks. Enabling or changing an application's CI still requires that repository's maintainer decision; this command neither enables CI nor runs tests. Its read-only online preflight discovers the proposed hosted check names, which does not prove that they passed or will run at a future head. The review pipeline's `--test-check` names must identify actual test checks among the resulting required checks.
+
+Before applying, coordinate the account-wide pause with the operator and other repositories. Record the current registered configuration hash, actual scheduler directory, and prior pause state. Pause admission durably and inspect all account work. For the repository being updated, the command requires no queued, held, admitted, submitted, active or unknown executions; no unfinished review pipeline or ambiguous intent; and idle/live-run verification for every owned implementation/reviewer/QA/repair agent. Resolve unfinished work through its existing identity rather than deleting journals, fences or intents. Completed history is retained.
+
+Quiesce custom factory processes before opening existing stores with this release: stop the owned controller service and any foreground controller runners, and confirm all owned dispatcher/review agent runs have ended. The update release uses registry and scheduler schema **2**. Compatible older stores can be upgraded when opened, including during a dry run; older factory code then refuses the newer schema. A schema-version change does not revoke database handles already open in an older process. Restart every custom factory controller/dispatcher/review process from the updated factory commit before permitting work again. Keep this process change separate from restarting the Paperclip server or PostgreSQL.
+
+Run from the factory checkout, substituting the actual registered values:
+
+```sh
+FACTORY_REPOSITORY='owner/repository'
+FACTORY_CANDIDATE='/absolute/private/path/candidate.factory.yaml'
+FACTORY_OLD_CONFIG_HASH='<current registered 64-character configuration hash>'
+FACTORY_SCHEDULER='/absolute/private/path/to/the/registered/scheduler'
+
+"$FACTORY_NODE" scripts/factory.mjs scheduler pause \
+  --directory "$FACTORY_SCHEDULER" --json
+"$FACTORY_NODE" scripts/factory.mjs scheduler status \
+  --directory "$FACTORY_SCHEDULER" --json
+
+# Dry run is the default; --dry-run makes that choice explicit.
+"$FACTORY_NODE" scripts/factory.mjs repo update "$FACTORY_REPOSITORY" \
+  --config "$FACTORY_CANDIDATE" --expected-config-hash "$FACTORY_OLD_CONFIG_HASH" \
+  --dry-run --json
+
+# Apply only the reviewed candidate against that exact old registration.
+"$FACTORY_NODE" scripts/factory.mjs repo update "$FACTORY_REPOSITORY" \
+  --config "$FACTORY_CANDIDATE" --expected-config-hash "$FACTORY_OLD_CONFIG_HASH" \
+  --apply --json
+```
+
+Use `--registry /absolute/registry/directory` on both update invocations when the registration is outside the default registry. The command uses the existing registered policy; it accepts no replacement `--policy`. A dry run plans and checks prerequisites without creating an update intent or publishing configuration. Opening compatible local stores can upgrade SQLite metadata, tighten permissions or create bookkeeping sidecars; dry run is not a promise of zero local filesystem writes. Applying changes only private local configuration, registry and scheduler state. It preserves native company/project/workspace/agent IDs and adapters; it does not hire agents, create native tasks, send Paperclip writes, wake an agent or submit Cloud work.
+
+Applying records a durable update intent before replacing generated main and review configuration files. Each replacement is atomic and fsynced; recovery accepts only the recorded exact old or new bytes. An admission fence rejects old or missing generated configuration, including after an account resume, until the update is complete. This is a recoverable multi-file update, not a claim that all files change in one filesystem operation.
+
+If interrupted, rerun the **same** `repo update ... --apply` command with the same candidate and original `--expected-config-hash`; it recovers that recorded intent. Unknown file bytes or changed bindings require investigation. Do not edit generated files manually, delete the update record, clear the fence, or invent a new old hash to force progress. The account remains paused after completion. Inspect the resulting registration, generated configuration and scheduler state, restart the intended custom controller using the updated commit, then coordinate any separate `scheduler resume --directory "$FACTORY_SCHEDULER" --json` with the operator and the recorded prior pause state. Updating check requirements is not approval to dispatch work.
+
+This procedure does not claim a live Story Keeper configuration update. Its actual registered checks remain unchanged until an operator completes and verifies that separate update.
 
 ## Module boundaries and verification
 

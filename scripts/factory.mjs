@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { loadRepositoryConfig, loadFactoryPolicy, validateFactoryPolicy, RepositoryConfigError } from '../lib/repository-config.mjs';
 import { RepositoryRegistry, RegistryError, configurationHash } from '../lib/repository-registry.mjs';
 import { buildOnboardingPlan, bootstrapRepository, inspectRepository } from '../lib/repository-onboarding.mjs';
+import { updateRepositoryConfiguration } from '../lib/repository-update.mjs';
 
 const HELP = `Usage:
   factory scheduler --help
@@ -17,15 +18,18 @@ const HELP = `Usage:
   factory repo add [--config .factory.yaml] [--policy POLICY] [--registry DIRECTORY] [--json]
   factory repo list [--registry DIRECTORY] [--json]
   factory repo status OWNER/REPO [--registry DIRECTORY] [--json]
+  factory repo update OWNER/REPO --config FILE --expected-config-hash SHA [--dry-run|--apply] [--registry DIRECTORY] [--json]
   factory repo bootstrap --config FILE --company UUID --dry-run [--json]
   factory repo bootstrap OWNER/REPO --company UUID [--registry DIRECTORY] [--json]
 
 Online checks/bootstrap accept --node, --paperclip, --codex, --github, --api-base,
 --private-dir, and --factory-root with absolute paths where applicable.
 Validation never executes repository commands. Bootstrap never submits Cloud work.
+Update defaults to dry-run and only adds required CI checks. Account admission
+must stay paused and the repository must be idle; no Cloud/native writes occur.
 `;
-const VALUE_FLAGS = new Set(['--config', '--policy', '--registry', '--company', '--node', '--paperclip', '--codex', '--github', '--api-base', '--private-dir', '--factory-root']);
-const BOOL_FLAGS = new Set(['--json', '--online', '--dry-run']);
+const VALUE_FLAGS = new Set(['--config', '--policy', '--registry', '--company', '--node', '--paperclip', '--codex', '--github', '--api-base', '--private-dir', '--factory-root', '--expected-config-hash']);
+const BOOL_FLAGS = new Set(['--json', '--online', '--dry-run', '--apply']);
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 function commandOnPath(name) {
   for (const directory of (process.env.PATH ?? '').split(path.delimiter)) {
@@ -37,7 +41,15 @@ function commandOnPath(name) {
 }
 const advice = {
   REPOSITORY_NOT_REGISTERED: 'Run factory repo add --config PATH first.',
-  REPOSITORY_ALREADY_REGISTERED_WITH_DIFFERENT_CONFIG: 'Preserve the registered binding and inspect the changed configuration before replacing it.',
+  REPOSITORY_ALREADY_REGISTERED_WITH_DIFFERENT_CONFIG: 'Use factory repo update for an explicit additive required-check change. Preserve existing registration and history.',
+  CONFIGURATION_UPDATE_SCOPE_UNSUPPORTED: 'Only adding delivery.requiredChecks is supported. Keep all existing checks, policy, identity and other fields unchanged.',
+  CONFIGURATION_UPDATE_REQUIRES_PAUSE: 'Pause account admission in the registered scheduler before updating; the command never resumes it.',
+  SCHEDULER_CONFIGURATION_UPDATE_REQUIRES_PAUSE: 'Pause account admission in the registered scheduler before updating; the command never resumes it.',
+  CONFIGURATION_UPDATE_EXECUTIONS_NOT_IDLE: 'Reconcile existing queued, held, active or unknown executions before updating. Do not reset their receipts.',
+  CONFIGURATION_UPDATE_REVIEW_NOT_IDLE: 'Resolve unfinished review pipelines or ambiguous role/task/workspace writes before updating.',
+  CONFIGURATION_UPDATE_FILE_CHANGED: 'The update remains fenced. Inspect unexpected private file bytes; do not force, delete history or re-register.',
+  CONFIGURATION_UPDATE_CONFLICT: 'Inspect factory repo status and retry the exact interrupted command with its original expected hash.',
+  REGISTRY_CONFIG_CHANGED: 'Read factory repo status and compare its config hash with the expected hash; do not overwrite another update.',
   BOOTSTRAP_OPERATION_CONFLICT: 'Another bootstrap updated this operation. Re-run to inspect its durable state; do not recreate objects manually.',
   BOOTSTRAP_OPERATION_EXISTS: 'Inspect factory repo status before retrying.',
   USAGE_FACTORY: 'Use factory --help for supported commands.',
@@ -45,7 +57,7 @@ const advice = {
 const usageError = () => Object.assign(new Error('USAGE_FACTORY'), { code: 'USAGE_FACTORY' });
 function parse(args) {
   if (args.length === 0 || args.includes('--help')) return { help: true };
-  if (args[0] !== 'repo' || !['validate', 'add', 'list', 'status', 'bootstrap'].includes(args[1])) throw usageError();
+  if (args[0] !== 'repo' || !['validate', 'add', 'list', 'status', 'bootstrap', 'update'].includes(args[1])) throw usageError();
   const values = new Map(), positionals = [];
   for (let i = 2; i < args.length; i++) {
     const flag = args[i];
@@ -58,8 +70,10 @@ function parse(args) {
     else positionals.push(flag);
   }
   const command = args[1];
-  if (positionals.length > 1 || (command === 'status' && positionals.length !== 1) || (['validate', 'add', 'list'].includes(command) && positionals.length)) throw usageError();
-  if (values.has('--dry-run') && command !== 'bootstrap') throw usageError();
+  if (positionals.length > 1 || (['status', 'update'].includes(command) && positionals.length !== 1) || (['validate', 'add', 'list'].includes(command) && positionals.length)) throw usageError();
+  if (values.has('--dry-run') && !['bootstrap', 'update'].includes(command)) throw usageError();
+  if (values.has('--apply') && command !== 'update' || values.has('--expected-config-hash') && command !== 'update') throw usageError();
+  if (command === 'update' && (!values.has('--config') || !values.has('--expected-config-hash') || values.has('--apply') && values.has('--dry-run') || [...values.keys()].some(flag => !['--config', '--expected-config-hash', '--registry', '--json', '--dry-run', '--apply'].includes(flag)))) throw usageError();
   if (values.has('--online') && command !== 'validate') throw usageError();
   if (command === 'bootstrap' && (values.has('--dry-run') ? positionals.length || !values.has('--config') : positionals.length !== 1 || values.has('--config') || values.has('--policy'))) throw usageError();
   return { command, values, repository: positionals[0] };
@@ -119,6 +133,8 @@ export async function runFactoryCli(args, { stdout = value => process.stdout.wri
         }
         if (result.bootstrap?.pendingWrite) stdout(`  Unresolved external write: ${result.bootstrap.pendingWrite}; inspect ownership before retrying.\n`);
         if (result.outstandingGates?.length) stdout(`  Pending verification: ${result.outstandingGates.join(', ')}\n`);
+        if (result.addedRequiredChecks?.length) stdout(`  Added required checks: ${result.addedRequiredChecks.join(', ')}\n`);
+        if (result.accountPaused) stdout('  Account admission stays paused. Resume separately after inspecting the updated bindings.\n');
       }
     };
     if (command === 'validate' || command === 'add' || (command === 'bootstrap' && values.has('--dry-run'))) {
@@ -152,9 +168,17 @@ export async function runFactoryCli(args, { stdout = value => process.stdout.wri
     if (!registration) throw Object.assign(new Error(), { code: 'REPOSITORY_NOT_REGISTERED' });
     if (command === 'status') {
       const operation = registry.getOperation(repository);
+      const update = registry.getConfigurationUpdate(repository);
       emit({ status: operation?.state ?? 'registered', ...summary(registration.config), configHash: registration.configHash,
         bootstrap: operation ? { revision: operation.revision, updatedAt: operation.updatedAt, projectId: operation.data.projectId, workspaceId: operation.data.workspaceId, agentId: operation.data.agentId, pendingWrite: operation.data.pending?.kind } : null,
+        ...(update ? { configurationUpdate: { updateId: update.updateId, state: update.state, previousConfigHash: update.previousHash, configHash: update.nextHash } } : {}),
         operationalVerified: false }); return 0;
+    }
+    if (command === 'update') {
+      const sourcePath = path.resolve(values.get('--config'));
+      const config = await loadRepositoryConfig(sourcePath, { policy: registration.policy });
+      const result = await updateRepositoryConfiguration({ registry, repository, config, sourcePath, expectedConfigHash: values.get('--expected-config-hash'), dryRun: !values.has('--apply'), ...(run ? { run } : {}) });
+      emit(result); return result.status === 'needs_attention' ? 1 : 0;
     }
     const result = await bootstrapRepository({ registry, repository, companyId: values.get('--company'), runtime, ...(run ? { run } : {}) });
     emit(result); return result.status === 'configured' ? 0 : 1;

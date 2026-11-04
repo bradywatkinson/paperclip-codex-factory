@@ -4,6 +4,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { DeliveryArtifactStore } from '../lib/delivery-artifacts.mjs';
 import { inspectGitHubDelivery } from '../lib/github-delivery.mjs';
+import { ReviewPipeline } from '../lib/review-pipeline.mjs';
 import { ReviewRoleBindings, buildReviewPlan } from '../lib/review-onboarding.mjs';
 import test from 'node:test';
 import { startReviewPipeline, runReviewControllerOnce, reviewStatus, setReviewPaused, resolveReviewQueuedProfile } from '../lib/review-controller.mjs';
@@ -155,4 +156,82 @@ test('completed job history does not consume the active job budget for later QA 
 test('invalid batch limits reject before storage or provider work', async () => {
   for (const maxPipelines of [0, -1, 1.5, '1', Infinity, 101]) await assert.rejects(runReviewControllerOnce({ maxPipelines }), { code: 'REVIEW_CONTROLLER_INVALID_LIMIT' });
   await assert.rejects(runReviewControllerOnce({ maxJobs: 0 }), { code: 'REVIEW_CONTROLLER_INVALID_LIMIT' });
+});
+
+function startRegistryUpdate(f) {
+  const operation = f.registry.getOperation(f.repository);
+  f.registry.updateOperation(f.repository, { expectedRevision: operation.revision, state: 'configuration_updating', data: operation.data });
+}
+function readPipeline(f) {
+  // Capture path before exercising the update, since new plans must now fail.
+  return f.pipeline();
+}
+test('cutover after fresh source reads rejects seed and activation together', async t => {
+  const f = reviewFixture(t); await f.bootstrap(); await f.makeObservation();
+  const plan = buildReviewPlan({ registry: f.registry, repository: f.repository }), run = f.run;
+  const guardedRun = async (command, args, options) => {
+    const result = await run(command, args, options);
+    if (command === f.runtime.githubCommand && args.at(-1).endsWith('/pulls/7')) startRegistryUpdate(f);
+    return result;
+  };
+  await assert.rejects(startReviewPipeline({ registry: f.registry, scheduler: f.scheduler, repository: f.repository, observationPath: f.observationPath, patchPath: f.patchPath, approveDispatch: true, testCheckNames: ['unit'], run: guardedRun }), { code: 'REGISTRY_CONFIG_CHANGED' });
+  const store = new ReviewRoleBindings({ directory: plan.directory });
+  try { assert.equal(store.list().some(row => row.key.startsWith('activation:')), false); } finally { store.close(); }
+  const pipeline = new ReviewPipeline({ directory: plan.pipelineDirectory });
+  try { assert.equal(pipeline.list().length, 0); } finally { pipeline.close(); }
+  assert.equal(f.calls.some(row => row.args[1] === 'child:create' || row.args[1] === 'wake'), false);
+});
+test('cutover before workspace sending preserves planned intent and sends no workspace or child', async t => {
+  const f = await started(t), pipeline = readPipeline(f), run = f.run;
+  t.after(() => pipeline.close());
+  f.run = async (command, args, options) => {
+    const result = await run(command, args, options);
+    if (args[0] === 'project-workspace' && args[1] === 'list') startRegistryUpdate(f);
+    return result;
+  };
+  const result = await f.once(); assert.ok(result.needsAttention.some(row => row.code === 'REGISTRY_CONFIG_CHANGED'), JSON.stringify(result));
+  assert.equal(pipeline.listJobs()[0].state, 'planned');
+  const store = new ReviewRoleBindings({ directory: path.dirname(pipeline.directory) });
+  try { assert.equal(store.list().find(row => row.key.startsWith('workspace:')).state, 'planned'); assert.equal(store.list().some(row => row.key.startsWith('task:')), false); } finally { store.close(); }
+  assert.equal(f.calls.some(row => row.args[0] === 'project-workspace' && row.args[1] === 'create' || row.args[1] === 'child:create'), false);
+});
+test('cutover after checkout reads fences task creation intent and actual task claim', async t => {
+  const f = await started(t), pipeline = readPipeline(f), run = f.run;
+  t.after(() => pipeline.close());
+  f.run = async (command, args, options) => {
+    const result = await run(command, args, options);
+    if (args[0] === 'whoami') startRegistryUpdate(f);
+    return result;
+  };
+  const result = await f.once(); assert.ok(result.needsAttention.some(row => row.code === 'REGISTRY_CONFIG_CHANGED'), JSON.stringify(result));
+  assert.equal(pipeline.listJobs()[0].state, 'planned');
+  const store = new ReviewRoleBindings({ directory: path.dirname(pipeline.directory) });
+  try { assert.equal(store.list().some(row => row.key.startsWith('task:')), false); } finally { store.close(); }
+  assert.equal(f.calls.some(row => row.args[1] === 'child:create'), false);
+});
+test('cutover after liveness reads fences wake intent and sends no wake', async t => {
+  const f = await started(t), pipeline = readPipeline(f), run = f.run;
+  t.after(() => pipeline.close());
+  f.run = async (command, args, options) => {
+    const result = await run(command, args, options);
+    if (args[0] === 'issue' && args[1] === 'live-runs') startRegistryUpdate(f);
+    return result;
+  };
+  const result = await f.once(); assert.ok(result.needsAttention.some(row => row.code === 'REGISTRY_CONFIG_CHANGED'), JSON.stringify(result));
+  assert.equal(pipeline.listJobs()[0].state, 'task_bound'); assert.equal(pipeline.listJobs()[0].wake, null);
+  assert.equal(f.calls.some(row => row.args[1] === 'wake'), false);
+});
+
+test('cutover after final CI reads fences human approval intent and notification', async t => {
+  const f = await started(t); await f.once(); let job = f.jobs()[0]; await f.dispatch(job); job = f.jobs()[0]; f.finish(job); await f.once(); await f.once();
+  job = f.jobs().at(-1); await f.dispatch(job); job = f.jobs().at(-1); f.finish(job);
+  const pipeline = readPipeline(f), run = f.run; t.after(() => pipeline.close());
+  f.run = async (command, args, options) => {
+    const result = await run(command, args, options);
+    if (command === f.runtime.githubCommand && args.at(-1).endsWith('/pulls/7')) startRegistryUpdate(f);
+    return result;
+  };
+  const result = await f.once(); assert.ok(result.needsAttention.some(row => row.code === 'REGISTRY_CONFIG_CHANGED'), JSON.stringify(result));
+  assert.equal(pipeline.get(f.pipelineId).approval, null); assert.equal(f.interactions.length, 0);
+  assert.equal(f.calls.some(row => row.args[1] === 'interaction:create'), false);
 });
