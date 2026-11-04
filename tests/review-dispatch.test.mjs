@@ -10,6 +10,7 @@ import { DeliveryArtifactStore } from '../lib/delivery-artifacts.mjs';
 import { summarizeDeliveryPatch } from '../lib/github-delivery.mjs';
 import { validateFactoryPolicy, validateRepositoryConfig } from '../lib/repository-config.mjs';
 import { configurationHash } from '../lib/repository-registry.mjs';
+import { dispatchFromPaperclip } from '../lib/cloud-dispatch.mjs';
 import { dispatchReviewFromPaperclip } from '../lib/review-dispatch.mjs';
 import { runReviewDispatchCli } from '../scripts/review-dispatch.mjs';
 import { ExecutionJournal } from '../lib/execution-journal.mjs';
@@ -170,4 +171,48 @@ test('an implementation Cloud receipt cannot be reused as independent review com
   const run = async (command, args) => args[0] === 'cloud' ? { code: 0, stdout: 'https://chatgpt.com/remote/task_e_' + 'c'.repeat(32) + '\n' } : f.run(command, args);
   await assert.rejects(f.invoke({ run }), error => error.outcome === 'unknown');
   assert.equal(f.record().state, 'unknown'); assert.equal(f.pipeline.getJob(f.job.jobId).cloudTaskId, null);
+});
+
+function configurationFence(f, { nextHash = configurationHash(f.config.factoryConfig), ready = true } = {}) {
+  const scheduler = new DispatchScheduler({ directory: f.config.schedulerDirectory, limits: f.config.factoryPolicy.concurrency });
+  try {
+    scheduler.registerRepository({ repository: f.config.repository, maxActive: 1, maxAttempts: 3 }); scheduler.setPaused(true);
+    const updateId = randomUUID();
+    scheduler.beginConfigurationUpdate({ repository: f.config.repository, updateId, previousHash: configurationHash(f.config.factoryConfig), nextHash });
+    if (ready) { scheduler.finishConfigurationUpdate({ repository: f.config.repository, updateId, nextHash }); scheduler.setPaused(false); }
+  } finally { scheduler.close(); }
+}
+
+test('ready configuration fence accepts original registered hash for a trusted virtual review branch', async t => {
+  const f = fixture(t); f.bind(); configurationFence(f);
+  const result = await f.invoke(); assert.equal(result.status, 'dispatched');
+  assert.equal(f.record().branch, 'review/base'); assert.equal(f.config.factoryConfig.defaultBranch, 'main');
+  assert.equal(f.commands.filter(args => args[0] === 'cloud').length, 1);
+});
+
+test('stale main config and config-JSON hash spoof fail before journal, checkout or provider commands', async t => {
+  const f = fixture(t), nextHash = 'f'.repeat(64); configurationFence(f, { nextHash });
+  f.config.factoryRole = 'implementer'; f.config.workspaceId = f.checkout.workspaceId; f.checkout.branch = 'main';
+  f.task.description = 'Factory base SHA: ' + BASE + '\nImplement the fixture.';
+  await assert.rejects(f.invoke({ config: { ...f.config, registeredConfigHash: nextHash } }), { code: 'SCHEDULER_CONFIGURATION_CHANGED' });
+  assert.equal(fs.existsSync(f.config.stateDirectory), false); assert.equal(f.commands.length, 0);
+  assert.equal(f.apiCalls.some(row => row.method !== 'GET'), false);
+});
+
+test('update starting during checkout prevents new journal publication and Cloud submission', async t => {
+  const f = fixture(t); f.bind();
+  const request = async (url, options) => {
+    const response = await f.request(url, options);
+    if (new URL(url).pathname.endsWith('/checkout')) configurationFence(f, { ready: false });
+    return response;
+  };
+  await assert.rejects(f.invoke({ request }), { code: 'SCHEDULER_CONFIGURATION_UPDATING' });
+  assert.equal(f.record(), null); assert.equal(f.pipeline.getJob(f.job.jobId).executionId, null);
+  assert.equal(f.commands.filter(args => args[0] === 'cloud').length, 0);
+});
+
+test('trusted configuration hash override rejects malformed values independently of config JSON', async t => {
+  const f = fixture(t);
+  await assert.rejects(dispatchFromPaperclip({ config: f.config, registeredConfigHash: 'not-a-hash' }), { code: 'INVALID_REGISTERED_CONFIG_HASH' });
+  assert.equal(fs.existsSync(f.config.stateDirectory), false); assert.equal(f.commands.length, 0);
 });
