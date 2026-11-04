@@ -122,6 +122,8 @@ FACTORY_NODE="$HOME/.local/share/paperclip-runtime-next/node_modules/node/bin/no
 
 See [repository configuration and onboarding](docs/repository-onboarding.md), [review/repair orchestration](docs/review-controller.md), [controller service operations](docs/controller-service.md), [private remote access](docs/remote-access.md) and [narrow MCP tools](docs/paperclip-mcp.md). Validation is separate from successful execution; bootstrapping never submits a Cloud job. Review batches require an explicit approved delivery and `--approve-dispatch`.
 
+An existing configured repository can strengthen its CI gate through `factory repo update OWNER/REPO --config ABS_YAML --expected-config-hash OLD_SHA`. The default is a dry run; `--apply` requires a paused account, no unfinished execution/review or ambiguous intent for that repository, and verified idle owned agents. Only additions to `delivery.requiredChecks` are supported; the existing policy and every other normalized binding stay fixed. The durable update retains native IDs and execution history, fences stale configuration, and leaves admission paused for a separate operator resume. Stop custom factory runners before opening stores with this release, and restart them from the updated commit: registry/scheduler schema 2 rejects older code but cannot revoke its already-open handles. Follow the [update and interruption-recovery procedure](docs/repository-onboarding.md#add-required-ci-checks-to-a-configured-repository), including dry-run metadata effects. A `receipt` marker does not substitute for actual application-test checks, and no Story Keeper update or Cloud submission is implied.
+
 ## Upstream references
 
 - [Managed installation](https://docs.paperclip.ing/reference/cli/installation/)
