@@ -73,7 +73,7 @@ function fixture(t, { patch = PATCH, role = 'reviewer' } = {}) {
   };
   f.run = async (_command, args) => {
     f.commands.push(args);
-    if (args[0] === '--version') return { code: 0, stdout: 'codex-cli 0.166.0\n' };
+    if (args[0] === '--version') return { code: 0, stdout: 'codex-cli 0.167.0\n' };
     if (args[0] === 'login') return { code: 0, stdout: 'Logged in using ChatGPT\n' };
     const attached = pipeline.getJob(job.jobId); assert.ok(attached.executionId); assert.equal(attached.execution.state, 'queued');
     if (f.outcomeUnknown) return { code: null, timedOut: true, stdout: '', stderr: 'PRIVATE_PROVIDER_DIAGNOSTIC' };
@@ -151,7 +151,7 @@ test('ordinary implementer keeps its original registered role/base prompt withou
   f.task.description = 'Factory base SHA: ' + BASE + '\nImplement the bounded fixture change.';
   let prompt;
   const run = async (_command, args) => {
-    if (args[0] === '--version') return { code: 0, stdout: 'codex-cli 0.166.0\n' };
+    if (args[0] === '--version') return { code: 0, stdout: 'codex-cli 0.167.0\n' };
     if (args[0] === 'login') return { code: 0, stdout: 'Logged in using ChatGPT\n' };
     prompt = args.at(-1); return { code: 0, stdout: 'https://chatgpt.com/remote/task_e_' + 'd'.repeat(32) + '\n' };
   };

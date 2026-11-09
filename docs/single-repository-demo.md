@@ -35,7 +35,7 @@ mkdir -p "$DEMO_EVIDENCE"
 ./scripts/paperclip service status --instance factory --json
 ```
 
-Reference versions are Node 24.15.0, Codex CLI 0.166.0, and Paperclip 2026.1023.0. Resolve a version mismatch before dispatch; do not upgrade or adapt the contract silently. If Board authentication is needed, use the normal [CLI sign-in flow](cloud-reconcile.md#configuration-and-sign-in), without reading or copying credentials. Do not publish login approval URLs or raw service/agent output without inspection.
+Reference versions are Node 24.15.0, Codex CLI 0.167.0, and Paperclip 2026.1023.0. Resolve a version mismatch before dispatch; do not upgrade or adapt the contract silently. If Board authentication is needed, use the normal [CLI sign-in flow](cloud-reconcile.md#configuration-and-sign-in), without reading or copying credentials. Do not publish login approval URLs or raw service/agent output without inspection.
 
 ## Dispatch once and retain the receipt
 

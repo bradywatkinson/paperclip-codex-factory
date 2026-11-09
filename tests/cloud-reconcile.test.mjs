@@ -64,7 +64,7 @@ function fixture(options = {}) {
   const run = async (command, args, commandOptions) => {
     calls.push({ command, args, options: commandOptions });
     const done = value => ({ ...RESULT, stdout: JSON.stringify(value) });
-    if (args[0] === '--version') return { ...RESULT, stdout: 'codex-cli ' + (options.version ?? '0.166.0') + '\n' };
+    if (args[0] === '--version') return { ...RESULT, stdout: 'codex-cli ' + (options.version ?? '0.167.0') + '\n' };
     if (args[0] === 'login') return options.authResult ?? { ...RESULT, stderr: 'Logged in using ChatGPT\n' };
     if (args[0] === 'cloud' && args[1] === 'list') return options.cloudResult ?? done(pages[page++] ?? { tasks: [], cursor: null });
     if (args[0] === 'whoami') return done({ userId: USER, companyIds: [COMPANY], isInstanceAdmin: false, source: 'board_key' });
@@ -326,7 +326,7 @@ for (const task of [{ url: 'https://evil.example/' }, { environment_id: 'b'.repe
 });
 
 test('unsupported CLI versions and non-ChatGPT authentication stop before list requests', async t => {
-  for (const options of [{ version: '0.167.0' }, { authResult: { ...RESULT, stderr: 'Logged in using an API key\n' } }]) {
+  for (const options of [{ version: '0.166.0' }, { version: '0.168.0' }, { authResult: { ...RESULT, stderr: 'Logged in using an API key\n' } }]) {
     const context = await setup(t), f = fixture(options);
     await invoke(context, f);
     assert.equal(cloudCalls(f).length, 0);

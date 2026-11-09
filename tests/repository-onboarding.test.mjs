@@ -24,7 +24,7 @@ function fixture(t, config = input()) {
   const run = async (command, args, options) => {
     state.calls.push({ command, args, options });
     const [group, action, ...rest] = args;
-    if (action === undefined && group === '--version') return result(command === runtime.nodeCommand ? 'v24.15.0\n' : command === runtime.codexCommand ? 'codex-cli 0.166.0\n' : '2026.1023.0\n');
+    if (action === undefined && group === '--version') return result(command === runtime.nodeCommand ? 'v24.15.0\n' : command === runtime.codexCommand ? 'codex-cli 0.167.0\n' : '2026.1023.0\n');
     if (command === runtime.githubCommand) {
       const resource = args.at(-1);
       if (resource.endsWith('/branches/main')) return result({ name: 'main', commit: { sha: 'b'.repeat(40) } });

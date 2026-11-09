@@ -1,0 +1,217 @@
+{
+  "schemaVersion": 1,
+  "cli_version": "0.167.0",
+  "executable": "/Users/bradyw/.codex/packages/standalone/releases/0.167.0-aarch64-apple-darwin/bin/codex",
+  "executable_sha256": "030316ecfbb41f4e7946e584b0063ef333b7a36cd312ba349f2f6869e39b62cc",
+  "cloudSubmissions": false,
+  "scope": "Read-only candidate command/help/authentication/environment-list captures and observation of an existing accepted 0.166.0 probe. No new task, dispatch, apply, journal reconciliation or lifecycle transition was exercised.",
+  "environment_id": "6a7aa92536508191bf085b59e7d6b8ba",
+  "historical_task_id": "task_e_6ae76e6a06948325b7310562482caa13",
+  "historical_task_provenance": "../live/dispatch/manifest.json",
+  "commands": [
+    {
+      "name": "version",
+      "executable": "/Users/bradyw/.codex/packages/standalone/releases/0.167.0-aarch64-apple-darwin/bin/codex",
+      "argv": [
+        "--version"
+      ],
+      "cli_version": "0.167.0",
+      "started_at_utc": "2026-11-09T05:13:52.797Z",
+      "finished_at_utc": "2026-11-09T05:13:52.828Z",
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "error_code": null,
+      "timeout_seconds": 25,
+      "stdout": "version.stdout.txt",
+      "stderr": "version.stderr.txt",
+      "redactions": []
+    },
+    {
+      "name": "login-status",
+      "executable": "/Users/bradyw/.codex/packages/standalone/releases/0.167.0-aarch64-apple-darwin/bin/codex",
+      "argv": [
+        "login",
+        "status"
+      ],
+      "cli_version": "0.167.0",
+      "started_at_utc": "2026-11-09T05:13:52.828Z",
+      "finished_at_utc": "2026-11-09T05:13:52.877Z",
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "error_code": null,
+      "timeout_seconds": 25,
+      "stdout": "login-status.stdout.txt",
+      "stderr": "login-status.stderr.txt",
+      "redactions": []
+    },
+    {
+      "name": "cloud-help",
+      "executable": "/Users/bradyw/.codex/packages/standalone/releases/0.167.0-aarch64-apple-darwin/bin/codex",
+      "argv": [
+        "cloud",
+        "--help"
+      ],
+      "cli_version": "0.167.0",
+      "started_at_utc": "2026-11-09T05:13:52.877Z",
+      "finished_at_utc": "2026-11-09T05:13:52.889Z",
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "error_code": null,
+      "timeout_seconds": 25,
+      "stdout": "cloud-help.stdout.txt",
+      "stderr": "cloud-help.stderr.txt",
+      "redactions": []
+    },
+    {
+      "name": "cloud-exec-help",
+      "executable": "/Users/bradyw/.codex/packages/standalone/releases/0.167.0-aarch64-apple-darwin/bin/codex",
+      "argv": [
+        "cloud",
+        "exec",
+        "--help"
+      ],
+      "cli_version": "0.167.0",
+      "started_at_utc": "2026-11-09T05:13:52.889Z",
+      "finished_at_utc": "2026-11-09T05:13:52.900Z",
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "error_code": null,
+      "timeout_seconds": 25,
+      "stdout": "cloud-exec-help.stdout.txt",
+      "stderr": "cloud-exec-help.stderr.txt",
+      "redactions": []
+    },
+    {
+      "name": "cloud-list-help",
+      "executable": "/Users/bradyw/.codex/packages/standalone/releases/0.167.0-aarch64-apple-darwin/bin/codex",
+      "argv": [
+        "cloud",
+        "list",
+        "--help"
+      ],
+      "cli_version": "0.167.0",
+      "started_at_utc": "2026-11-09T05:13:52.900Z",
+      "finished_at_utc": "2026-11-09T05:13:52.910Z",
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "error_code": null,
+      "timeout_seconds": 25,
+      "stdout": "cloud-list-help.stdout.txt",
+      "stderr": "cloud-list-help.stderr.txt",
+      "redactions": []
+    },
+    {
+      "name": "cloud-status-help",
+      "executable": "/Users/bradyw/.codex/packages/standalone/releases/0.167.0-aarch64-apple-darwin/bin/codex",
+      "argv": [
+        "cloud",
+        "status",
+        "--help"
+      ],
+      "cli_version": "0.167.0",
+      "started_at_utc": "2026-11-09T05:13:52.910Z",
+      "finished_at_utc": "2026-11-09T05:13:52.922Z",
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "error_code": null,
+      "timeout_seconds": 25,
+      "stdout": "cloud-status-help.stdout.txt",
+      "stderr": "cloud-status-help.stderr.txt",
+      "redactions": []
+    },
+    {
+      "name": "cloud-diff-help",
+      "executable": "/Users/bradyw/.codex/packages/standalone/releases/0.167.0-aarch64-apple-darwin/bin/codex",
+      "argv": [
+        "cloud",
+        "diff",
+        "--help"
+      ],
+      "cli_version": "0.167.0",
+      "started_at_utc": "2026-11-09T05:13:52.922Z",
+      "finished_at_utc": "2026-11-09T05:13:52.933Z",
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "error_code": null,
+      "timeout_seconds": 25,
+      "stdout": "cloud-diff-help.stdout.txt",
+      "stderr": "cloud-diff-help.stderr.txt",
+      "redactions": []
+    },
+    {
+      "name": "cloud-apply-help",
+      "executable": "/Users/bradyw/.codex/packages/standalone/releases/0.167.0-aarch64-apple-darwin/bin/codex",
+      "argv": [
+        "cloud",
+        "apply",
+        "--help"
+      ],
+      "cli_version": "0.167.0",
+      "started_at_utc": "2026-11-09T05:13:52.933Z",
+      "finished_at_utc": "2026-11-09T05:13:52.944Z",
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "error_code": null,
+      "timeout_seconds": 25,
+      "stdout": "cloud-apply-help.stdout.txt",
+      "stderr": "cloud-apply-help.stderr.txt",
+      "redactions": []
+    },
+    {
+      "name": "environment-list",
+      "executable": "/Users/bradyw/.codex/packages/standalone/releases/0.167.0-aarch64-apple-darwin/bin/codex",
+      "argv": [
+        "cloud",
+        "list",
+        "--env",
+        "6a7aa92536508191bf085b59e7d6b8ba",
+        "--limit",
+        "1",
+        "--json"
+      ],
+      "cli_version": "0.167.0",
+      "started_at_utc": "2026-11-09T05:13:52.944Z",
+      "finished_at_utc": "2026-11-09T05:13:54.671Z",
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "error_code": null,
+      "timeout_seconds": 25,
+      "stdout": "environment-list.stdout.txt",
+      "stderr": "environment-list.stderr.txt",
+      "redactions": [
+        "stdout.tasks[0].title"
+      ]
+    },
+    {
+      "name": "historical-task-status",
+      "executable": "/Users/bradyw/.codex/packages/standalone/releases/0.167.0-aarch64-apple-darwin/bin/codex",
+      "argv": [
+        "cloud",
+        "status",
+        "task_e_6ae76e6a06948325b7310562482caa13"
+      ],
+      "cli_version": "0.167.0",
+      "started_at_utc": "2026-11-09T05:13:54.671Z",
+      "finished_at_utc": "2026-11-09T05:13:55.124Z",
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "error_code": null,
+      "timeout_seconds": 25,
+      "stdout": "historical-task-status.stdout.txt",
+      "stderr": "historical-task-status.stderr.txt",
+      "redactions": [
+        "stdout status headline task title"
+      ]
+    }
+  ]
+}

@@ -41,7 +41,7 @@ import fs from 'node:fs';
 const file=${JSON.stringify(stateFile)}, a=process.argv.slice(2), s=JSON.parse(fs.readFileSync(file,'utf8'));
 const save=()=>{const tmp=file+'.'+process.pid+'.tmp';fs.writeFileSync(tmp,JSON.stringify(s));fs.renameSync(tmp,file);};
 const out=value=>process.stdout.write(JSON.stringify(value)+'\\n');
-if(a[0]==='--version') process.stdout.write('codex-cli 0.166.0\\n');
+if(a[0]==='--version') process.stdout.write('codex-cli 0.167.0\\n');
 else if(a[0]==='login') process.stderr.write('Logged in using ChatGPT\\n');
 else if(a[0]==='cloud'&&a[1]==='exec'){s.submissions++;save();process.stdout.write('https://chatgpt.com/codex/tasks/${CLOUD}\\n');}
 else if(a[0]==='cloud'&&a[1]==='list'){s.listReads++;save();out({tasks:[{id:${JSON.stringify(CLOUD)},url:'https://chatgpt.com/codex/tasks/${CLOUD}',status:s.remoteStatus,updated_at:'2029-12-31T00:00:00Z',environment_id:null,summary:{files_changed:0,lines_added:0,lines_removed:0}}],cursor:null});}

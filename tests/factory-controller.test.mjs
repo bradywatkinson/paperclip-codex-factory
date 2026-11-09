@@ -42,7 +42,7 @@ function setup(t, { maxGlobalActive = 2, maxRepositoryActive = 1, sameCompanyRun
     calls.push({ command, args, options });
     assert.equal(args.includes('exec'), false, 'account controller must never directly submit Cloud work');
     assert.equal(options.env.PAPERCLIP_API_KEY, undefined);
-    if (args[0] === '--version') return { code: 0, stdout: 'codex-cli 0.166.0\n', stderr: '' };
+    if (args[0] === '--version') return { code: 0, stdout: 'codex-cli 0.167.0\n', stderr: '' };
     if (args[0] === 'login') return { code: 0, stdout: '', stderr: 'Logged in using ChatGPT' };
     if (args[0] === 'cloud') {
       const entry = entries.find(item => item.config.environmentId === args[args.indexOf('--env') + 1]);

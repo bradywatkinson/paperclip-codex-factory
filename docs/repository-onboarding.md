@@ -12,7 +12,9 @@ FACTORY_NODE="$HOME/.local/share/paperclip-runtime-next/node_modules/node/bin/no
 "$FACTORY_NODE" scripts/factory.mjs --help
 ```
 
-Live checks require managed Paperclip `2026.1023.0`, Codex CLI `0.166.0` signed in through ChatGPT, GitHub CLI access through its normal saved sign-in, and an active Paperclip company accessible through its normal Board CLI sign-in. Keep credentials in those private stores. Do not copy bearer tokens, auth files or login approval URLs into repository configuration or evidence.
+Live checks require managed Paperclip `2026.1023.0`, Codex CLI `0.167.0` signed in through ChatGPT, GitHub CLI access through its normal saved sign-in, and an active Paperclip company accessible through its normal Board CLI sign-in. Keep credentials in those private stores. Do not copy bearer tokens, auth files or login approval URLs into repository configuration or evidence.
+
+The 0.167.0 adapter baseline is an explicit source update. Historical fixtures capture 0.166.0, and a new authorized 0.167.0 Cloud lifecycle remains unverified; see the [compatibility evidence and upgrade policy](codex-cloud/README.md). Updating this source does not restart a running controller or approve Cloud submission.
 
 Keep the central policy and onboarding registry outside application checkouts, under private factory storage. Use an absolute, stable Node path and factory checkout path for process agents; moving either after provisioning changes the recorded bootstrap binding. Read [operations](operations.md) and [dispatch setup](cloud-dispatch.md) before live provisioning.
 

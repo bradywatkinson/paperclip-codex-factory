@@ -20,7 +20,7 @@ function fixture() {
   const run = async (command, args, options) => {
     state.calls.push({ command, args, options });
     if (command === runtime.codexCommand) {
-      if (args[0] === '--version') return output('codex-cli 0.166.0\n');
+      if (args[0] === '--version') return output('codex-cli 0.167.0\n');
       if (args[0] === 'login') return { code: 0, stdout: '', stderr: 'Logged in using ChatGPT\n' };
       assert.deepEqual(args, ['cloud', 'diff', execution.cloudTaskId, '--attempt', '1']);
       return output(state.patch);
@@ -217,7 +217,7 @@ async function repairFixture() {
   const run = async (command, args, options) => {
     state.calls.push({ command, args, options });
     if (command === original.runtime.codexCommand) {
-      if (args[0] === '--version') return output('codex-cli 0.166.0\n');
+      if (args[0] === '--version') return output('codex-cli 0.167.0\n');
       if (args[0] === 'login') return { code: 0, stdout: '', stderr: 'Logged in using ChatGPT' };
       assert.deepEqual(args, ['cloud', 'diff', execution.cloudTaskId, '--attempt', '1']); return output(state.cloudDelta);
     }

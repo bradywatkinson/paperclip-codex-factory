@@ -34,7 +34,7 @@ function setup(t) {
     state.calls.push({ command, args, options });
     if (state.fail) return { code: 1, stdout: 'PRIVATE_DIAGNOSTIC_NEVER_SAVE', stderr: 'PRIVATE_DIAGNOSTIC_NEVER_SAVE' };
     if (command === '/fixture/codex') {
-      if (args[0] === '--version') return { code: 0, stdout: 'codex-cli 0.166.0\n', stderr: '' };
+      if (args[0] === '--version') return { code: 0, stdout: 'codex-cli 0.167.0\n', stderr: '' };
       if (args[0] === 'login') return { code: 0, stdout: '', stderr: 'Logged in using ChatGPT' };
       assert.deepEqual(args, ['cloud', 'diff', CLOUD, '--attempt', '1']);
       return { code: 0, stdout: PATCH, stderr: '' };
@@ -286,7 +286,7 @@ async function prepareRepair(f) {
   const run = async (command, args, options) => {
     state.calls.push({ command, args, options });
     if (command === '/fixture/codex') {
-      if (args[0] === '--version') return output('codex-cli 0.166.0\n');
+      if (args[0] === '--version') return output('codex-cli 0.167.0\n');
       if (args[0] === 'login') return { code: 0, stdout: '', stderr: 'Logged in using ChatGPT' };
       assert.deepEqual(args, ['cloud', 'diff', repairCloud, '--attempt', '1']); return output(delta);
     }

@@ -82,7 +82,7 @@ async function verifiedRepair(f, job, { head = 'd'.repeat(40) } = {}) {
   const output = value => ({ code: 0, stdout: typeof value === 'string' ? value : JSON.stringify(value), stderr: '' });
   const run = async (command, args) => {
     if (command === '/fixture/codex') {
-      if (args[0] === '--version') return output('codex-cli 0.166.0\n');
+      if (args[0] === '--version') return output('codex-cli 0.167.0\n');
       if (args[0] === 'login') return { code: 0, stdout: '', stderr: 'Logged in using ChatGPT' };
       return output(delta);
     }
