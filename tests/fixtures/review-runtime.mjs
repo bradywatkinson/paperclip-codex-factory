@@ -36,7 +36,7 @@ export function reviewFixture(t) {
     f.calls.push({ command, args });
     if (command === runtime.nodeCommand && args[0] === '--version') return { code: 0, stdout: 'v24.15.0\n', stderr: '' };
     if (command === runtime.codexCommand) {
-      if (args[0] === '--version') return { code: 0, stdout: 'codex-cli 0.166.0\n', stderr: '' };
+      if (args[0] === '--version') return { code: 0, stdout: 'codex-cli 0.167.0\n', stderr: '' };
       if (args[0] === 'login') return { code: 0, stdout: '', stderr: 'Logged in using ChatGPT\n' };
       if (args[0] === 'cloud' && args[1] === 'diff') return { code: 0, stdout: f.cloudDiffs.get(args[2]) ?? '', stderr: '' };
       if (args[0] === 'cloud' && args[1] === 'exec') { const cloudTaskId = 'task_e_' + String(f.nextCloud++).padStart(32, '0'); return { code: 0, stdout: 'https://chatgpt.com/remote/' + cloudTaskId + '\n', stderr: '' }; }

@@ -1,0 +1,2 @@
+# Preserve whitespace emitted by the captured Codex help output.
+/docs/codex-cloud/fixtures/0.167.0/*-help.stdout.txt whitespace=-blank-at-eol

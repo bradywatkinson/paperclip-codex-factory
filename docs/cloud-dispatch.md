@@ -2,7 +2,7 @@
 
 Issue [#3](https://github.com/bradywatkinson/paperclip-codex-factory/issues/3) adds an external, one-shot bridge using Paperclip's supported `process` adapter. It submits an assigned task through the tested Codex Cloud CLI, records the receipt, gives the Paperclip task an explicit external-wait disposition, and exits. It does not keep a local worker running while Cloud performs the task.
 
-The implementation is `lib/cloud-dispatch.mjs`, invoked by `scripts/cloud-dispatch.mjs`. It uses Node built-ins, including the transactional [execution journal](execution-journal.md), and changes no Paperclip core files. The reference versions are Paperclip `2026.1023.0`, Node `24.15.0`, and Codex CLI `0.166.0`. See the [Cloud compatibility matrix](codex-cloud/README.md) for the experimental CLI's observed behavior.
+The implementation is `lib/cloud-dispatch.mjs`, invoked by `scripts/cloud-dispatch.mjs`. It uses Node built-ins, including the transactional [execution journal](execution-journal.md), and changes no Paperclip core files. The reference versions are Paperclip `2026.1023.0`, Node `24.15.0`, and Codex CLI `0.167.0`. See the [Cloud compatibility matrix](codex-cloud/README.md) for the experimental CLI's observed behavior.
 
 ## Paperclip integration contract
 
@@ -87,7 +87,7 @@ The bridge performs these steps:
 
 1. Validate context and configuration; fetch the current agent, running heartbeat, assigned issue, and project.
 2. Validate a bounded prompt containing issue ID, repository, requested base branch, title, description, and acceptance criteria. Task title is limited to 500 bytes, description to 24,000 bytes, and the complete prompt to 32,000 bytes. Oversized content is rejected rather than silently truncated.
-3. Check exact Codex version `0.166.0` and successful `Logged in using ChatGPT` status. The auth status may be on stderr; nonempty stderr alone is not a failure.
+3. Check exact Codex version `0.167.0` and successful `Logged in using ChatGPT` status. The auth status may be on stderr; nonempty stderr alone is not a failure.
 4. Check out the task for the current run, revalidate its scope and workspace binding, rebuild the prompt from the latest checkout title/description, then queue and atomically claim its logical execution in the journal. A durable compatibility fence precedes the claim.
 5. Execute one `codex cloud exec --env … --branch … --attempts 1` with the entire prompt as one literal argument. No shell is used.
 6. Accept only a single validated ChatGPT task URL as a receipt; retain the emitted URL and a `/remote/<taskId>` navigation URL separately.

@@ -46,7 +46,7 @@ async function temporary(t) {
   return dir;
 }
 
-function fixture({ issue = task, agent = {}, heartbeat = {}, project = {}, responses = {}, execResult = {}, version = '0.166.0', auth = 'ChatGPT', runId = RUN } = {}) {
+function fixture({ issue = task, agent = {}, heartbeat = {}, project = {}, responses = {}, execResult = {}, version = '0.167.0', auth = 'ChatGPT', runId = RUN } = {}) {
   const apiCalls = [];
   const commands = [];
   const request = async (url, options) => {
@@ -297,7 +297,8 @@ test('scope/config/auth failures never reach Cloud dispatch', async t => {
     { fixture: { project: { workspaces: [{ companyId: OTHER, repoUrl: 'https://github.com/fixture/project' }] } } },
     { fixture: { project: { workspaces: [{ projectId: OTHER, repoUrl: 'https://github.com/fixture/project' }] } } },
     { fixture: { project: { workspaces: [{ repoUrl: 'https://github.com/fixture/project', repoRef: {} }] } } },
-    { fixture: { version: '0.167.0' } },
+    { fixture: { version: '0.166.0' } },
+    { fixture: { version: '0.168.0' } },
     { fixture: { auth: 'an API key' } },
     { fixture: { responses: { [`POST /api/issues/${ISSUE}/checkout`]: new Response('{}', { status: 409 }) } } },
     { fixture: { responses: { [`POST /api/issues/${ISSUE}/checkout`]: new Response(JSON.stringify({ ...task, executionRunId: OTHER })) } } },
@@ -477,7 +478,7 @@ test('process entrypoint, real fixture HTTP API and inert executable exercise th
   const dir = await temporary(t);
   const command = path.join(dir, "codex fixture's executable");
   const recordFile = path.join(dir, 'argv.jsonl');
-  await fs.writeFile(command, `#!${process.execPath}\nimport fs from 'node:fs';\nconst args=process.argv.slice(2);\nfs.appendFileSync(${JSON.stringify(recordFile)},JSON.stringify({args,hasPaperclipKey:!!process.env.PAPERCLIP_API_KEY})+'\\n');\nif(args[0]==='--version') console.log('codex-cli 0.166.0');\nelse if(args[0]==='login') console.error('Logged in using ChatGPT');\nelse console.log(${JSON.stringify(EMITTED)});\n`, { mode: 0o700 });
+  await fs.writeFile(command, `#!${process.execPath}\nimport fs from 'node:fs';\nconst args=process.argv.slice(2);\nfs.appendFileSync(${JSON.stringify(recordFile)},JSON.stringify({args,hasPaperclipKey:!!process.env.PAPERCLIP_API_KEY})+'\\n');\nif(args[0]==='--version') console.log('codex-cli 0.167.0');\nelse if(args[0]==='login') console.error('Logged in using ChatGPT');\nelse console.log(${JSON.stringify(EMITTED)});\n`, { mode: 0o700 });
   const mock = fixture();
   const apiUrl = await startApi(t, mock);
   const configFile = path.join(dir, 'project config.json');
@@ -510,7 +511,7 @@ test('supervisor cancellation kills the Cloud process tree and preserves an unkn
   const childPid = path.join(dir, 'child-pid');
   const leaked = path.join(dir, 'grandchild-survived');
   const grandchild = `const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(started)},String(process.pid));setTimeout(()=>fs.writeFileSync(${JSON.stringify(leaked)},'survived'),1500);setTimeout(()=>{},10000)`;
-  await fs.writeFile(command, `#!${process.execPath}\nimport fs from 'node:fs';import {spawn} from 'node:child_process';\nconst args=process.argv.slice(2);\nif(args[0]==='--version') console.log('codex-cli 0.166.0');\nelse if(args[0]==='login') console.error('Logged in using ChatGPT');\nelse {fs.writeFileSync(${JSON.stringify(childPid)},String(process.pid));spawn(process.execPath,['-e',${JSON.stringify(grandchild)}],{stdio:'ignore'});setTimeout(()=>{},10000);}\n`, { mode: 0o700 });
+  await fs.writeFile(command, `#!${process.execPath}\nimport fs from 'node:fs';import {spawn} from 'node:child_process';\nconst args=process.argv.slice(2);\nif(args[0]==='--version') console.log('codex-cli 0.167.0');\nelse if(args[0]==='login') console.error('Logged in using ChatGPT');\nelse {fs.writeFileSync(${JSON.stringify(childPid)},String(process.pid));spawn(process.execPath,['-e',${JSON.stringify(grandchild)}],{stdio:'ignore'});setTimeout(()=>{},10000);}\n`, { mode: 0o700 });
   const configFile = path.join(dir, 'config.json');
   await fs.writeFile(configFile, JSON.stringify({ ...config, codexCommand: command }));
   const mock = fixture();

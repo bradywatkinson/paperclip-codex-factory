@@ -50,7 +50,7 @@ function cli(journal, options = {}) {
   const calls = [], cards = [];
   const run = async (command, args, commandOptions) => {
     calls.push({ command, args, options: commandOptions });
-    if (args[0] === '--version') return { ...RESULT, stdout: 'codex-cli 0.166.0\n' };
+    if (args[0] === '--version') return { ...RESULT, stdout: 'codex-cli 0.167.0\n' };
     if (args[0] === 'login') return { ...RESULT, stderr: 'Logged in using ChatGPT\n' };
     if (args[0] === 'cloud' && args[1] === 'list') {
       if (options.providerResult) return options.providerResult;

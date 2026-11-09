@@ -2,7 +2,7 @@
 
 Issue [#5](https://github.com/bradywatkinson/paperclip-codex-factory/issues/5) adds a local reconciler for accepted Cloud executions recorded in the [execution journal](execution-journal.md). It polls the pinned CLI, records sanitized observations, and creates a review-notification interaction card in Paperclip when Cloud reports READY. **It preserves every Paperclip task status.** A blocked task stays blocked until an operator reviews the result and decides what to do.
 
-The implementation is `lib/cloud-reconcile.mjs`, invoked by `scripts/cloud-reconcile.mjs`. Reference versions are Node **24.15.0**, Codex CLI **0.166.0**, and Paperclip **2026.1023.0**. It uses the supported CLIs and the local schema-4 journal; it changes no Paperclip core files. The [#6 recovery controller](controller-recovery.md) adds startup inventory, bounded polling retries, and durable usage cooldown around this reconciler.
+The implementation is `lib/cloud-reconcile.mjs`, invoked by `scripts/cloud-reconcile.mjs`. Reference versions are Node **24.15.0**, Codex CLI **0.167.0**, and Paperclip **2026.1023.0**. It uses the supported CLIs and the local schema-4 journal; it changes no Paperclip core files. The [#6 recovery controller](controller-recovery.md) adds startup inventory, bounded polling retries, and durable usage cooldown around this reconciler.
 
 ## What READY establishes
 

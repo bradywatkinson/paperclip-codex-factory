@@ -1,0 +1,21 @@
+{
+  "tasks": [
+    {
+      "id": "task_e_6aea56bcfedc8325ae7ca2ad3b574527",
+      "url": "https://chatgpt.com/codex/tasks/task_e_6aea56bcfedc8325ae7ca2ad3b574527",
+      "title": "[redacted task title]",
+      "status": "ready",
+      "updated_at": "2026-11-03T21:52:18.960262060Z",
+      "environment_id": null,
+      "environment_label": "bradywatkinson/story-keeper",
+      "summary": {
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_removed": 0
+      },
+      "is_review": true,
+      "attempt_total": 1
+    }
+  ],
+  "cursor": "+RID:~G4U-AJOIzhm4uVEDAHhkAg==#RT:1#TRC:1#RTD:FFMNeBmc06hP2994zep3KwV2dGZzLnc6Q2VQTjhidVNVNmtYcm1GZXZVbjJWSAAFdnRmcy53OkNlUE44YnVTVTZrWHJtRmV2VW4yVkgABUJkZHB2b3VWdGZzVXBEdnNzZm91RHBlZlVidGxGeXVmc29ibQAD+szOzMjRzc3RzsuqzM3EysbEysrQxcXIx83M087OxM7O//qKnYuTn5mfyJ2ZncnInJuYmZqbxsvMyZ2Zx5udzJ2ay5zJx8rJzMf/#ISV:2#IEO:65599#QCF:8#CID:2"
+}

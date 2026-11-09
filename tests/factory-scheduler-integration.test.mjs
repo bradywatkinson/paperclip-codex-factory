@@ -54,7 +54,7 @@ function fixture(t) {
       };
       const run = async (command, args, options) => {
         lane.commands.push({ command, args, options });
-        if (args[0] === '--version') return { code: 0, stdout: 'codex-cli 0.166.0\n', stderr: '' };
+        if (args[0] === '--version') return { code: 0, stdout: 'codex-cli 0.167.0\n', stderr: '' };
         if (args[0] === 'login') return { code: 0, stdout: '', stderr: 'Logged in using ChatGPT\n' };
         assert.equal(args[0], 'cloud'); assert.equal(args[1], 'exec');
         return lane.unknown ? { code: null, stdout: '', stderr: 'PRIVATE_FIXTURE_DIAGNOSTIC', timedOut: true } : { code: 0, stdout: 'https://chatgpt.com/codex/tasks/' + lane.cloudTaskId + '\n', stderr: '' };

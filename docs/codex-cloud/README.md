@@ -2,7 +2,11 @@
 
 Issue: [#2 — Verify the experimental Codex Cloud CLI contract](https://github.com/bradywatkinson/paperclip-codex-factory/issues/2).
 
-This spike records the installed CLI before an adapter is designed. The tested local binary is **codex-cli 0.166.0**, using **ChatGPT login**. Cloud commands identify themselves as experimental. No stable API contract is inferred from command names or a successful help command.
+This spike records the installed CLI before an adapter is designed. Its captured binary is **codex-cli 0.166.0**, using **ChatGPT login**. Cloud commands identify themselves as experimental. No stable API contract is inferred from command names or a successful help command.
+
+The adapter's current source baseline is **codex-cli 0.167.0**, selected explicitly by the maintainer during Story Keeper onboarding. The fixtures and lifecycle results below remain historical 0.166.0 evidence; they were not recaptured or relabelled as 0.167.0 results. Local adapter tests use synthetic 0.167.0 responses. A new authorized 0.167.0 Cloud lifecycle probe is still pending, and this source update does not restart the running controller or authorize dispatch.
+
+[Versioned 0.167.0 read-only observations](fixtures/0.167.0/manifest.json) separately record its command surface, authentication mode and existing-task reads. They do not establish a new dispatch lifecycle, repair, or controller-restart result for that version.
 
 ## Evidence and current limits
 
@@ -14,7 +18,7 @@ The installed help is the authority for accepted flags in this release. Official
 
 | Capability | Installed 0.166.0 contract | Verification and adapter implication |
 | --- | --- | --- |
-| Version | `codex --version` | Observed `codex-cli 0.166.0`; pin this exact compatibility baseline. |
+| Version | `codex --version` | Observed `codex-cli 0.166.0`; historical captured baseline, distinct from the adapter's current source baseline above. |
 | ChatGPT authentication | `codex login status` | Observed ChatGPT login; no logout, login reset, token extraction, or API key required by this spike. |
 | Environment discovery | `codex cloud` opens an interactive terminal picker (TUI); `exec --env` requires an identifier | Help and official documentation agree. No environment-list subcommand or environment-list JSON contract is advertised. Confirm the target environment and repository before dispatch; [read-only TUI discovery](fixtures/live/environment-discovery.md) records the available option without authorizing its use. |
 | Dispatch | `codex cloud exec --env ENV_ID [--branch BRANCH] [--attempts N] [QUERY]` | Help verified. Attempts default to 1; the official reference specifies 1–4. `--branch` defaults to the current branch. The authorized probe explicitly used Story Keeper environment `6a7aa92536508191bf085b59e7d6b8ba`, branch `main`, one attempt, and the canonical prompt; observed submission exit 0. |
@@ -81,7 +85,7 @@ The Cloud UI's ability to request follow-ups or open a PR is a product capabilit
 
 ## Upgrade policy
 
-Treat every CLI change as a new compatibility candidate because `codex cloud` is experimental. Keep 0.166.0 as the last recorded local baseline until the replacement passes the same capture and harmless lifecycle procedure. Do not upgrade automatically as part of task dispatch.
+Treat every CLI change as a new compatibility candidate because `codex cloud` is experimental. Version 0.166.0 remains the last captured lifecycle baseline; the explicitly requested source update to 0.167.0 does not establish that lifecycle evidence. Complete the same capture and authorized harmless lifecycle procedure before activating the updated controller for dispatch. Do not upgrade automatically as part of task dispatch.
 
 For a reviewed upgrade, retain the prior fixtures, capture the new binary version and help in a separately versioned evidence directory, and compare accepted commands, flags, stream placement, JSON keys, state labels, identifiers and error/exit behavior. Repeat the authorized one-attempt probe before enabling that version for an adapter. Preserve distinct evidence for command-line parsing, transport/authentication, submission, execution failure and caller deadlines.
 
